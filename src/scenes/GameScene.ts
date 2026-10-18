@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { ORIGIN_X, ORIGIN_Y, PALETTE, princeFrame } from '../art';
 import type { Tile } from '../contracts';
 import { KeyboardInput } from '../input';
 import { HAZARD_LEVEL, HAZARD_OBJECTS, TEST_LEVEL, parseAscii } from '../level';
@@ -144,11 +145,15 @@ export class GameScene extends Phaser.Scene {
 
     const px = player.x - ox * TILE_SIZE;
     const feet = VIEW_Y + (player.ty - oy) * TILE_SIZE + SLAB_Y;
-    const h = player.state === 'crouch' ? 18 : 30;
-    this.gfx.fillStyle(player.state === 'dead' ? COLORS.dead : COLORS.player).fillRect(px - 6, feet - h, 12, h);
-    // Nose pixel shows facing direction.
-    this.gfx.fillStyle(0x202030).fillRect(px + (player.facing === 1 ? 2 : -6), feet - h + 4, 4, 3);
-
+    const sprite = princeFrame(player.state, player.frame, player.landDuration, player.fallPhase);
+    const flip = (player.facing === -1) !== sprite.mirror;
+    const baseX = px + sprite.dx * player.facing - ORIGIN_X;
+    const baseY = feet + sprite.dy - ORIGIN_Y;
+    for (const run of sprite.runs) {
+      this.gfx.fillStyle(PALETTE[run.c]!);
+      const rx = flip ? ORIGIN_X * 2 + 1 - run.x - run.len : run.x;
+      this.gfx.fillRect(Math.round(baseX + rx), Math.round(baseY + run.y), run.len, 1);
+    }
     this.banner.setText(this.completed ? 'LEVEL COMPLETE - press R' : player.state === 'dead' ? 'YOU DIED - press R' : '');
     this.debug.setText(
       `${player.state}  tile ${player.tx},${player.ty}  hp ${player.hp}/${player.maxHp}  tick ${this.sim.tick}\n` +
