@@ -6,6 +6,8 @@ export interface GameEvents {
   'player:died': { source: DamageEvent['source'] };
   'player:healed': { amount: number };
   'guard:died': { id: string };
+  'shadow:appeared': Record<string, never>;
+  'shadow:merged': Record<string, never>;
   'trap:triggered': { id: string; type: string };
   'gate:opened': { id: string };
   'potion:collected': { id: string; kind: string };

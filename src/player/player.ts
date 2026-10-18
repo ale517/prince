@@ -52,7 +52,7 @@ export interface PlayerStart {
 
 export class Player implements Combatant, Body {
   readonly id = 'player';
-  readonly team = 'player';
+  readonly team: 'player' | 'enemy' = 'player';
   /** Horizontal position in px (centre of the character). */
   x: number;
   ty: number;

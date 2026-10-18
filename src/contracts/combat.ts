@@ -12,6 +12,13 @@ export interface GuardDef {
   patrol?: { min: number; max: number };
 }
 
+/** A mirror: when the prince stands on (tx, ty) his reflection steps out at shadowTx (spec 04). */
+export interface MirrorDef {
+  tx: number;
+  ty: number;
+  shadowTx: number;
+}
+
 /** What a fighter is doing right now, independent of how it animates. */
 export type FightAction = 'none' | 'ready' | 'advance' | 'retreat' | 'strike' | 'parry' | 'hurt';
 

@@ -1,4 +1,4 @@
-import type { Facing, GuardDef, ObjectDef, ObjectType, TileGrid, TileType } from '../contracts';
+import type { Facing, GuardDef, MirrorDef, ObjectDef, ObjectType, TileGrid, TileType } from '../contracts';
 import { ArrayTileGrid } from '../world';
 
 const LEGEND: Record<string, TileType> = {
@@ -31,11 +31,13 @@ export interface ParsedLevel {
   guards: GuardDef[];
   /** The prince begins with a sword (the prototype finds it at the start). */
   hasSword: boolean;
+  mirror?: MirrorDef;
 }
 
 export interface LevelExtras {
   guards?: readonly GuardDef[];
   hasSword?: boolean;
+  mirror?: MirrorDef;
 }
 
 /**
@@ -75,7 +77,7 @@ export function parseAscii(rows: readonly string[], extra: readonly ObjectDef[] 
     if (ids.has(o.id)) throw new Error(`duplicate object id '${o.id}'`);
     ids.add(o.id);
   }
-  return { grid, start, objects, guards: [...(more.guards ?? [])], hasSword: more.hasSword ?? false };
+  return { grid, start, objects, guards: [...(more.guards ?? [])], hasSword: more.hasSword ?? false, mirror: more.mirror };
 }
 
 /** Movement test arena: a 2-tile gap, a climbable ledge and a drop to the lower screen. */
