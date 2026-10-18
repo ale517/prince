@@ -47,11 +47,11 @@ export class MenuScene extends Phaser.Scene {
     const main = (keep = false): void => {
       controls.setVisible(false);
       menu.set([
-        { label: 'New Game', action: () => this.scene.start('GameScene', { levelId: 'hazard' } satisfies GameSceneData) },
+        { label: 'New Game', action: () => this.scene.start('GameScene', { levelId: 'prototype' } satisfies GameSceneData) },
         {
           label: 'Continue',
           enabled: save !== undefined,
-          action: () => save && this.scene.start('GameScene', { levelId: isLevelId(save.levelId) ? save.levelId : 'hazard', save, keepTime: save.timeRemaining } satisfies GameSceneData),
+          action: () => save && this.scene.start('GameScene', { levelId: isLevelId(save.levelId) ? save.levelId : 'prototype', save, keepTime: save.timeRemaining } satisfies GameSceneData),
         },
         {
           label: `Sound: ${audio().muted ? 'OFF' : 'ON'}`,

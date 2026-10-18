@@ -59,7 +59,7 @@ const storage = (): KeyValueStore | undefined => {
 export class GameScene extends Phaser.Scene {
   sim!: Simulation;
   phase: GamePhase = 'playing';
-  levelId: LevelId = 'hazard';
+  levelId: LevelId = 'prototype';
   private lastSave?: SaveData;
   private initData: GameSceneData = {};
   private keys!: KeyboardInput;
@@ -117,7 +117,7 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     const q = new URLSearchParams(window.location.search);
     const queryLevel = q.get('level');
-    this.levelId = this.initData.levelId ?? (isLevelId(queryLevel) ? queryLevel : 'hazard');
+    this.levelId = this.initData.levelId ?? (isLevelId(queryLevel) ? queryLevel : 'prototype');
     this.sim = buildSim(this.levelId, q);
     this.lastSave = this.initData.save;
     if (this.initData.save) this.sim.restore(this.initData.save);
