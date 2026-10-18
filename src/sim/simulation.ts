@@ -8,6 +8,9 @@ import { createWorldQuery, TILE_SIZE } from '../world';
 import { GameTimer, SAVE_VERSION } from '../save';
 import type { SaveData } from '../save';
 
+/** Minimum horizontal distance in px between the prince and a living guard. */
+const GUARD_BODY_GAP = 14;
+
 /** Deterministic fixed-tick simulation: same inputs in => same state out (spec 01). */
 export class Simulation {
   readonly bus = new EventBus();
@@ -51,7 +54,9 @@ export class Simulation {
 
   step(input: InputState): void {
     this.player.input = input;
+    const xBefore = this.player.x;
     this.player.update(1);
+    this.blockAtGuards(xBefore);
     for (const g of this.guards) g.update(1);
     this.updateShadow(input);
     const fighters: Combatant[] = [this.player, ...this.guards];
@@ -109,6 +114,16 @@ export class Simulation {
       if (o?.type === 'loose' && state.fallen === true) this.grid.set(o.tx, o.ty, { type: 'empty', state: 0 });
     }
     this.timer.set(data.timeRemaining);
+  }
+
+  /** A living guard is solid: the prince cannot run through him, only fight or retreat. */
+  private blockAtGuards(xBefore: number): void {
+    const p = this.player;
+    for (const g of this.guards) {
+      if (g.state === 'dead' || g.state === 'fall' || g.ty !== p.ty) continue;
+      const side = Math.sign(g.x - xBefore) || p.facing;
+      if ((g.x - p.x) * side < GUARD_BODY_GAP) p.x = g.x - side * GUARD_BODY_GAP;
+    }
   }
 
   private updateShadow(input: InputState): void {
