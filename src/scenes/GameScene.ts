@@ -1,10 +1,11 @@
 import Phaser from 'phaser';
-import { GUARD_PALETTE, ORIGIN_X, ORIGIN_Y, PALETTE, princeFrame } from '../art';
+import { GUARD_PALETTE, ORIGIN_X, ORIGIN_Y, PALETTE, SCALE, SPRITE_W, princeFrame } from '../art';
 import type { PrinceFrame } from '../art';
 import type { Guard } from '../combat';
 import type { Tile } from '../contracts';
 import { KeyboardInput } from '../input';
 import { DUEL_LEVEL, HAZARD_LEVEL, HAZARD_OBJECTS, TEST_LEVEL, duelGuards, parseAscii } from '../level';
+import { RENDER_SCALE } from '../config';
 import { Potion, SpikePhase } from '../objects';
 import { TICK_RATE } from '../player';
 import type { PlayerState } from '../player';
@@ -67,8 +68,14 @@ export class GameScene extends Phaser.Scene {
     this.sim.bus.on('level:completed', () => (this.completed = true));
     this.keys = new KeyboardInput(this);
     this.gfx = this.add.graphics();
-    this.debug = this.add.text(4, 150, '', { fontSize: '8px', color: '#9a9ab0' });
-    this.banner = this.add.text(160, 8, '', { fontSize: '10px', color: '#e8d8a8' }).setOrigin(0.5, 0);
+    // Zoom around the top-left corner so world coordinates still start at (0,0).
+    this.cameras.main.setZoom(RENDER_SCALE).centerOn(160, 100);
+    // Text is rendered at full resolution and scaled back down, otherwise the zoom would blur it.
+    this.debug = this.add.text(4, 150, '', { fontSize: `${8 * RENDER_SCALE}px`, color: '#9a9ab0' }).setScale(1 / RENDER_SCALE);
+    this.banner = this.add
+      .text(160, 8, '', { fontSize: `${10 * RENDER_SCALE}px`, color: '#e8d8a8' })
+      .setOrigin(0.5, 0)
+      .setScale(1 / RENDER_SCALE);
     this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.R).on('down', () => this.scene.restart());
   }
 
@@ -140,12 +147,15 @@ export class GameScene extends Phaser.Scene {
 
   private drawFighter(sprite: PrinceFrame, x: number, feet: number, facing: 1 | -1, palette: Record<number, number>, extraDx = 0): void {
     const flip = (facing === -1) !== sprite.mirror;
+    // Runs are in device pixels (1/SCALE of a world px); positions snap to that grid so edges stay crisp.
+    const snap = (v: number): number => Math.round(v * SCALE) / SCALE;
     const baseX = x + (sprite.dx + extraDx) * facing - ORIGIN_X;
     const baseY = feet + sprite.dy - ORIGIN_Y;
+    const width = SPRITE_W * SCALE;
     for (const run of sprite.runs) {
       this.gfx.fillStyle(palette[run.c]!);
-      const rx = flip ? ORIGIN_X * 2 + 1 - run.x - run.len : run.x;
-      this.gfx.fillRect(Math.round(baseX + rx), Math.round(baseY + run.y), run.len, 1);
+      const rx = flip ? width - run.x - run.len : run.x;
+      this.gfx.fillRect(snap(baseX) + rx / SCALE, snap(baseY) + run.y / SCALE, run.len / SCALE, 1 / SCALE);
     }
   }
 
