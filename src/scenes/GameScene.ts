@@ -1,10 +1,13 @@
 import Phaser from 'phaser';
-import { ORIGIN_X, ORIGIN_Y, PALETTE, princeFrame } from '../art';
+import { GUARD_PALETTE, ORIGIN_X, ORIGIN_Y, PALETTE, princeFrame } from '../art';
+import type { PrinceFrame } from '../art';
+import type { Guard } from '../combat';
 import type { Tile } from '../contracts';
 import { KeyboardInput } from '../input';
-import { HAZARD_LEVEL, HAZARD_OBJECTS, TEST_LEVEL, parseAscii } from '../level';
+import { DUEL_LEVEL, HAZARD_LEVEL, HAZARD_OBJECTS, TEST_LEVEL, duelGuards, parseAscii } from '../level';
 import { Potion, SpikePhase } from '../objects';
 import { TICK_RATE } from '../player';
+import type { PlayerState } from '../player';
 import { Simulation } from '../sim';
 import { SCREEN_TILES_H, SCREEN_TILES_W, TILE_SIZE } from '../world';
 
@@ -26,10 +29,23 @@ const COLORS = {
   potion: { small: 0xd04050, large: 0xe05080, poison: 0x50c050 },
 };
 
+/** Picks which of the shared sprite poses a guard should wear. */
+function guardSprite(g: Guard): { state: PlayerState; dx: number } {
+  if (g.state === 'dead') return { state: 'dead', dx: 0 };
+  if (g.state === 'fall') return { state: 'fall', dx: 0 };
+  if (g.fightAction !== 'none' && g.fightAction !== 'ready') return { state: g.fightAction, dx: 0 };
+  return { state: g.state === 'idle' ? 'idle' : 'ready', dx: 0 };
+}
+
 function startLevel(): Simulation {
-  // ?level=move loads the plain movement arena; the hazard level is the default.
-  const useMove = new URLSearchParams(window.location.search).get('level') === 'move';
-  return new Simulation(useMove ? parseAscii(TEST_LEVEL) : parseAscii(HAZARD_LEVEL, HAZARD_OBJECTS));
+  // ?level=move loads the plain movement arena, ?level=duel[&skill=1..5] a sword fight; hazards are the default.
+  const q = new URLSearchParams(window.location.search);
+  const level = q.get('level');
+  if (level === 'duel') {
+    const skill = Math.min(5, Math.max(1, Number(q.get('skill')) || 1)) as 1 | 2 | 3 | 4 | 5;
+    return new Simulation(parseAscii(DUEL_LEVEL, [], { hasSword: true, guards: duelGuards(skill) }), Number(q.get('seed')) || 1);
+  }
+  return new Simulation(level === 'move' ? parseAscii(TEST_LEVEL) : parseAscii(HAZARD_LEVEL, HAZARD_OBJECTS));
 }
 
 export class GameScene extends Phaser.Scene {
@@ -122,6 +138,17 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private drawFighter(sprite: PrinceFrame, x: number, feet: number, facing: 1 | -1, palette: Record<number, number>, extraDx = 0): void {
+    const flip = (facing === -1) !== sprite.mirror;
+    const baseX = x + (sprite.dx + extraDx) * facing - ORIGIN_X;
+    const baseY = feet + sprite.dy - ORIGIN_Y;
+    for (const run of sprite.runs) {
+      this.gfx.fillStyle(palette[run.c]!);
+      const rx = flip ? ORIGIN_X * 2 + 1 - run.x - run.len : run.x;
+      this.gfx.fillRect(Math.round(baseX + rx), Math.round(baseY + run.y), run.len, 1);
+    }
+  }
+
   private draw(): void {
     const { grid, player } = this.sim;
     const ox = Math.floor(player.tx / SCREEN_TILES_W) * SCREEN_TILES_W;
@@ -145,19 +172,19 @@ export class GameScene extends Phaser.Scene {
 
     const px = player.x - ox * TILE_SIZE;
     const feet = VIEW_Y + (player.ty - oy) * TILE_SIZE + SLAB_Y;
-    const sprite = princeFrame(player.state, player.frame, player.landDuration, player.fallPhase);
-    const flip = (player.facing === -1) !== sprite.mirror;
-    const baseX = px + sprite.dx * player.facing - ORIGIN_X;
-    const baseY = feet + sprite.dy - ORIGIN_Y;
-    for (const run of sprite.runs) {
-      this.gfx.fillStyle(PALETTE[run.c]!);
-      const rx = flip ? ORIGIN_X * 2 + 1 - run.x - run.len : run.x;
-      this.gfx.fillRect(Math.round(baseX + rx), Math.round(baseY + run.y), run.len, 1);
+    for (const g of this.sim.guards) {
+      if (g.tx < ox || g.tx >= ox + SCREEN_TILES_W || g.ty < oy || g.ty >= oy + SCREEN_TILES_H) continue;
+      const gs = guardSprite(g);
+      this.drawFighter(princeFrame(gs.state, g.frame, 4, 0), g.x - ox * TILE_SIZE, VIEW_Y + (g.ty - oy) * TILE_SIZE + SLAB_Y, g.facing, GUARD_PALETTE, gs.dx);
     }
+    const sprite = princeFrame(player.state, player.frame, player.landDuration, player.fallPhase);
+    this.drawFighter(sprite, px, feet + 0, player.facing, PALETTE);
     this.banner.setText(this.completed ? 'LEVEL COMPLETE - press R' : player.state === 'dead' ? 'YOU DIED - press R' : '');
+    const g0 = this.sim.guards[0];
     this.debug.setText(
-      `${player.state}  tile ${player.tx},${player.ty}  hp ${player.hp}/${player.maxHp}  tick ${this.sim.tick}\n` +
-        'Arrows/WASD move  Shift step  Up jump  Down crouch/drink  R restart',
+      `${player.state}  tile ${player.tx},${player.ty}  hp ${player.hp}/${player.maxHp}  tick ${this.sim.tick}` +
+        (g0 ? `  guard ${g0.state}/${g0.fightAction} hp ${g0.hp}` : '') +
+        '\nArrows/WASD move  Shift step  Up jump  Down crouch/drink  Space sword/strike  Up parry  R restart',
     );
   }
 }
