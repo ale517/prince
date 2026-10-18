@@ -5,9 +5,9 @@ import type { Pose, V } from './princePose';
 import type { PlayerState } from '../player';
 
 /** Canvas size and the point inside it that is "on the ground under the feet". */
-export const SPRITE_W = 48;
+export const SPRITE_W = 64;
 export const SPRITE_H = 64;
-export const ORIGIN_X = 24;
+export const ORIGIN_X = 32;
 export const ORIGIN_Y = 60;
 
 export const C = {
@@ -22,6 +22,8 @@ export const C = {
   gem: 9,
   pants: 10,
   pantsShade: 11,
+  blade: 12,
+  hilt: 13,
 } as const;
 
 /** Original placeholder palette (not taken from the 1989 game). */
@@ -37,6 +39,20 @@ export const PALETTE: Record<number, number> = {
   [C.gem]: 0xf5c542,
   [C.pants]: 0xe6e2d2,
   [C.pantsShade]: 0xaaa58f,
+  [C.blade]: 0xdde3ee,
+  [C.hilt]: 0xf5c542,
+};
+
+/** Guards reuse the prince's sprites with a darker palette swap. */
+export const GUARD_PALETTE: Record<number, number> = {
+  ...PALETTE,
+  [C.tunic]: 0x8c2f2f,
+  [C.tunicShade]: 0x65201f,
+  [C.pants]: 0x3b3f5c,
+  [C.pantsShade]: 0x2a2d44,
+  [C.sash]: 0xe0b040,
+  [C.skin]: 0xc98a58,
+  [C.skinShade]: 0x9a6339,
 };
 
 const THIGH = 7.5;
@@ -126,6 +142,16 @@ export function rasterize(pose: Pose): Raster {
 
   arm(pose.handF, C.tunic, C.skin);
 
+  if (pose.sword) {
+    const h = toPx(pose.handF);
+    const tip = toPx(pose.sword);
+    pb.line(h[0], h[1], tip[0], tip[1], 1.4, C.blade);
+    // Crossguard: a short bar perpendicular to the blade, just above the grip.
+    const ang = Math.atan2(tip[1] - h[1], tip[0] - h[0]);
+    const gx = h[0] + Math.cos(ang) * 2;
+    const gy = h[1] + Math.sin(ang) * 2;
+    pb.line(gx - Math.sin(ang) * 2.4, gy + Math.cos(ang) * 2.4, gx + Math.sin(ang) * 2.4, gy - Math.cos(ang) * 2.4, 1.2, C.hilt);
+  }
   pb.outline(C.outline);
   return { runs: pb.runs(), clipped: pb.clipped };
 }

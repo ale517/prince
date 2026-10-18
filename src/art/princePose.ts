@@ -11,12 +11,14 @@ export interface Pose {
   footB: V;
   handF: V;
   handB: V;
+  /** Blade tip when a sword is drawn; the blade runs from the front hand to here. */
+  sword?: V;
 }
 
-const KEYS: (keyof Pose)[] = ['hip', 'chest', 'head', 'footF', 'footB', 'handF', 'handB'];
+const KEYS: (keyof Omit<Pose, 'sword'>)[] = ['hip', 'chest', 'head', 'footF', 'footB', 'handF', 'handB'];
 
 export function lerpPose(a: Pose, b: Pose, t: number): Pose {
-  const out = {} as Record<keyof Pose, V>;
+  const out = {} as Pose;
   for (const k of KEYS) out[k] = [a[k][0] + (b[k][0] - a[k][0]) * t, a[k][1] + (b[k][1] - a[k][1]) * t];
   return out;
 }
@@ -211,5 +213,69 @@ export function spriteFor(state: PlayerState, rawFrame: number, landTicks: numbe
       return still(CROUCH);
     case 'dead':
       return still(lerpPose(STAND, LYING, Math.min(1, (frame + 1) / 3)));
+    case 'drawSword': {
+      const t = Math.min(1, (frame + 1) / 3);
+      return still(withSword(lerpPose(STAND, FIGHT, t), [lerpN(4, 30, t), lerpN(2, 22, t)]));
+    }
+    case 'sheathe': {
+      const t = Math.min(1, (frame + 1) / 3);
+      return still(withSword(lerpPose(FIGHT, STAND, t), [lerpN(30, 4, t), lerpN(22, 2, t)]));
+    }
+    case 'ready':
+      return still(withSword(FIGHT, FIGHT_TIP));
+    case 'advance':
+    case 'retreat': {
+      const dir = state === 'advance' ? 1 : -1;
+      const p = Math.min(frame, 3) / 3;
+      const step = Math.sin(p * Math.PI);
+      return still(
+        withSword({ ...FIGHT, footF: add(FIGHT.footF, dir * step * 4, step * 3), footB: add(FIGHT.footB, dir * step * 2, 0) }, FIGHT_TIP),
+      );
+    }
+    case 'strike': {
+      // Wind up for frames 0-2, thrust through the hit window 3-5.
+      const t = frame < 3 ? frame / 3 : 1;
+      const reach = frame < 3 ? 0 : 1;
+      const hand: V = [lerpN(10, 6, t) + reach * 8, 21];
+      return still(
+        withSword({ ...lerpPose(FIGHT, LUNGE, reach ? 1 : 0), handF: hand }, [hand[0] + 14 + reach * 2, 21 + (reach ? 0 : 4 * t)]),
+      );
+    }
+    case 'parry':
+      return still(withSword({ ...FIGHT, handF: [9, 23] }, [13, 41]));
+    case 'hurt':
+      return still(withSword(HURT, [16, 9]));
   }
 }
+
+const lerpN = (a: number, b: number, t: number): number => a + (b - a) * t;
+const withSword = (p: Pose, tip: V): Pose => ({ ...p, sword: tip });
+
+const FIGHT_TIP: V = [30, 22];
+const FIGHT: Pose = {
+  hip: [-1, 14],
+  chest: [1, 22.5],
+  head: [2.5, 28],
+  footF: [8, 0],
+  footB: [-6, 0],
+  handF: [10, 19],
+  handB: [-4, 14],
+};
+const LUNGE: Pose = {
+  hip: [3, 12],
+  chest: [6, 20.5],
+  head: [7.5, 26],
+  footF: [12, 0],
+  footB: [-8, 0],
+  handF: [14, 21],
+  handB: [-6, 14],
+};
+const HURT: Pose = {
+  hip: [-3, 14],
+  chest: [-3, 22],
+  head: [-3, 27],
+  footF: [4, 0],
+  footB: [-6, 0],
+  handF: [6, 16],
+  handB: [-8, 16],
+};

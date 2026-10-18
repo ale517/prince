@@ -6,6 +6,7 @@ import type { PlayerState } from '../src/player';
 const STATES: PlayerState[] = [
   'idle', 'startRun', 'run', 'stopRun', 'turn', 'step', 'jumpStanding', 'jumpRunning',
   'jumpUp', 'hang', 'climbUp', 'fall', 'land', 'crouch', 'dead',
+  'drawSword', 'sheathe', 'ready', 'advance', 'retreat', 'strike', 'parry', 'hurt',
 ];
 
 describe('solveLimb', () => {
