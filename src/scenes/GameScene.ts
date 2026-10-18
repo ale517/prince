@@ -185,7 +185,7 @@ export class GameScene extends Phaser.Scene {
     for (const g of this.sim.guards) {
       if (g.tx < ox || g.tx >= ox + SCREEN_TILES_W || g.ty < oy || g.ty >= oy + SCREEN_TILES_H) continue;
       const gs = guardSprite(g);
-      this.drawFighter(princeFrame(gs.state, g.frame, 4, 0), g.x - ox * TILE_SIZE, VIEW_Y + (g.ty - oy) * TILE_SIZE + SLAB_Y, g.facing, GUARD_PALETTE, gs.dx);
+      this.drawFighter(princeFrame(gs.state, g.frame, 4, 0, 'guard'), g.x - ox * TILE_SIZE, VIEW_Y + (g.ty - oy) * TILE_SIZE + SLAB_Y, g.facing, GUARD_PALETTE, gs.dx);
     }
     const sprite = princeFrame(player.state, player.frame, player.landDuration, player.fallPhase);
     this.drawFighter(sprite, px, feet + 0, player.facing, PALETTE);
