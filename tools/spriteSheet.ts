@@ -4,20 +4,21 @@ import { GUARD_PALETTE, PALETTE, SCALE, princeFrame } from '../src/art';
 
 // Debug contact sheet: renders sample frames to a PNG so the art can be reviewed without a browser.
 // Usage: npx tsx tools/spriteSheet.ts out.png
-const frames: [string, number][] = [['idle', 0], ['run', 1], ['run', 3], ['jumpRunning', 6], ['hang', 1], ['crouch', 1], ['ready', 0], ['strike', 4], ['parry', 2], ['dead', 3]];
-const cols = 5;
-const cellW = 56 * SCALE;
-const cellH = 56 * SCALE;
+const frames: [string, number][] = [['idle', 0], ['run', 1], ['jumpRunning', 6], ['ready', 0], ['advance', 1], ['strike', 4], ['parry', 2], ['hurt', 1], ['dead', 3]];
+const cols = frames.length;
+const cellW = 52 * SCALE;
+const cellH = 52 * SCALE;
 const zoom = 2;
 const W = cols * cellW * zoom;
-const H = Math.ceil(frames.length / cols) * cellH * zoom;
+const H = 2 * cellH * zoom;
 const px = new Uint8Array(W * H * 3).fill(0x20);
 
-frames.forEach(([s, f], i) => {
-  const fr = princeFrame(s as never, f, 4, 0);
-  const pal = i % 2 ? GUARD_PALETTE : PALETTE;
-  const ox = (i % cols) * cellW - 4 * SCALE;
-  const oy = Math.floor(i / cols) * cellH - 8 * SCALE;
+// Top row: the prince. Bottom row: the guard in the same poses.
+(['prince', 'guard'] as const).forEach((look, row) => frames.forEach(([s, f], i) => {
+  const fr = princeFrame(s as never, f, 4, 0, look);
+  const pal = look === 'guard' ? GUARD_PALETTE : PALETTE;
+  const ox = i * cellW - 6 * SCALE;
+  const oy = row * cellH - 10 * SCALE;
   for (const r of fr.runs) {
     const c = pal[r.c]!;
     for (let k = 0; k < r.len; k++) {
@@ -34,7 +35,7 @@ frames.forEach(([s, f], i) => {
       }
     }
   }
-});
+}));
 
 const raw = Buffer.alloc((W * 3 + 1) * H);
 for (let y = 0; y < H; y++) {

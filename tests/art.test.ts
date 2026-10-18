@@ -30,12 +30,14 @@ describe('solveLimb', () => {
 
 describe('prince sprites', () => {
   it('every state and frame fits inside the canvas and draws something', () => {
-    for (const state of STATES) {
-      for (let frame = 0; frame < 16; frame++) {
-        for (const landTicks of [4, 8]) {
-          const r = rasterize(spriteFor(state, frame, landTicks, 0.5).pose);
-          expect(r.clipped, `${state} frame ${frame}`).toBe(0);
-          expect(r.runs.length).toBeGreaterThan(0);
+    for (const look of ['prince', 'guard'] as const) {
+      for (const state of STATES) {
+        for (let frame = 0; frame < 16; frame++) {
+          for (const landTicks of [4, 8]) {
+            const r = rasterize(spriteFor(state, frame, landTicks, 0.5).pose, look);
+            expect(r.clipped, `${look} ${state} frame ${frame}`).toBe(0);
+            expect(r.runs.length).toBeGreaterThan(0);
+          }
         }
       }
     }
