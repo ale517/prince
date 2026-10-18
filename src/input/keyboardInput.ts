@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { InputState } from '../contracts';
+import { readPad } from './gamepadInput';
 
 const K = Phaser.Input.Keyboard.KeyCodes;
 
@@ -32,8 +33,9 @@ export class KeyboardInput {
 
   /** Call every render frame. */
   sample(): void {
+    const pad = readPad();
     for (const name of Object.keys(this.groups) as (keyof InputState)[]) {
-      if (this.groups[name].some((k) => k.isDown)) this.latch[name] = true;
+      if (pad[name] || this.groups[name].some((k) => k.isDown)) this.latch[name] = true;
     }
   }
 
