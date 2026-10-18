@@ -72,6 +72,16 @@ export class Player implements Entity, Body {
     return this.state === 'crouch';
   }
 
+  /** Length of the current landing recovery, for the landing animation. */
+  get landDuration(): number {
+    return this.landTicks;
+  }
+
+  /** 0..1 progress through the current row of a fall, so the renderer can smooth the 32px drops. */
+  get fallPhase(): number {
+    return this.state === 'fall' ? this.fallTick / C.FALL_TICKS_PER_ROW : 0;
+  }
+
   applyDamage(e: DamageEvent): void {
     if (this.state === 'dead') return;
     this.hp = Math.max(0, this.hp - e.amount);
