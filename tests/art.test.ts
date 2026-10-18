@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ORIGIN_X, ORIGIN_Y, SPRITE_H, SPRITE_W, princeFrame, rasterize, solveLimb } from '../src/art';
+import { ORIGIN_X, ORIGIN_Y, SCALE, SPRITE_H, SPRITE_W, princeFrame, rasterize, solveLimb } from '../src/art';
 import { spriteFor, STAND } from '../src/art/princePose';
 import type { PlayerState } from '../src/player';
 
@@ -43,18 +43,18 @@ describe('prince sprites', () => {
 
   it('standing pose keeps the feet on the ground line and the head above the hip', () => {
     const r = rasterize(STAND);
-    const lowest = Math.max(...r.runs.map((run) => run.y));
-    // Outline sits one pixel below the shoes.
+    const lowest = Math.max(...r.runs.map((run) => run.y)) / SCALE;
+    // Outline sits one device pixel below the shoes.
     expect(lowest).toBeLessThanOrEqual(ORIGIN_Y + 1);
     expect(lowest).toBeGreaterThanOrEqual(ORIGIN_Y - 1);
-    const highest = Math.min(...r.runs.map((run) => run.y));
+    const highest = Math.min(...r.runs.map((run) => run.y)) / SCALE;
     expect(ORIGIN_Y - highest).toBeGreaterThan(28);
     expect(ORIGIN_Y - highest).toBeLessThan(40);
   });
 
   it('is horizontally centred on the origin so mirroring is symmetric', () => {
     const r = rasterize(STAND);
-    const xs = r.runs.flatMap((run) => [run.x, run.x + run.len - 1]);
+    const xs = r.runs.flatMap((run) => [run.x / SCALE, (run.x + run.len - 1) / SCALE]);
     expect(Math.min(...xs)).toBeGreaterThan(ORIGIN_X - 14);
     expect(Math.max(...xs)).toBeLessThan(ORIGIN_X + 14);
     expect(SPRITE_W).toBeGreaterThan(ORIGIN_X);
