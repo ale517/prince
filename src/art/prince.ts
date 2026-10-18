@@ -165,6 +165,19 @@ export function rasterize(pose: Pose, look: Look = 'prince'): Raster {
     } else {
       pb.disc(ankle[0], ankle[1], 1.8, shade);
       pb.disc(ankle[0] + 0.2, ankle[1] - 0.2, 1.4, front ? C.pantsShade : shade);
+      if (front) {
+        // Gold-trimmed ankle cuff and a seam down the outer thigh.
+        pb.line(ankle[0] - 1.7, ankle[1] + 0.9, ankle[0] + 1.7, ankle[1] + 0.6, 0.4, C.hiltShade);
+        pb.line(ankle[0] - 1.6, ankle[1] - 0.2, ankle[0] + 1.6, ankle[1] - 0.5, 0.3, C.hilt);
+        pb.line(lerp(hip, joint, 0.25)[0] - 1.4, lerp(hip, joint, 0.25)[1] + 0.6, joint[0] - 1.2, joint[1] + 0.6, 0.3, shade);
+      }
+    }
+    if (guard && front) {
+      // Boot strap with a small buckle, and a stripe on the trousers.
+      const strap = lerp(lerp(joint, end, 0.4), end, 0.45);
+      pb.line(strap[0] - 1.7, strap[1], strap[0] + 1.7, strap[1] - 0.3, 0.45, C.outline);
+      pb.disc(strap[0] + 0.9, strap[1] - 0.2, 0.5, C.hilt);
+      pb.line(lerp(hip, joint, 0.2)[0] - 1.5, lerp(hip, joint, 0.2)[1] + 0.5, joint[0] - 1.3, joint[1] + 0.7, 0.35, C.pantsLight);
     }
     // Shoe with a curled toe.
     pb.line(f[0] - 1.4, f[1] - 0.9, f[0] + 3, f[1] - 0.9, 2.4, C.shoe);
@@ -191,6 +204,10 @@ export function rasterize(pose: Pose, look: Look = 'prince'): Raster {
       const sleeve = front ? C.tunic : C.tunicShade;
       seg(shoulder, joint, 3.5, sleeve, C.tunicShade, front ? C.tunicLight : undefined); // puffy sleeve
       pb.line(joint[0] - 0.8, joint[1] - 0.2, joint[0] + 1.2, joint[1] + 0.5, 0.35, C.tunicShade);
+      // Gold-edged cuff where the sleeve ends and a seam along the shoulder.
+      const cuff = lerp(joint, end, 0.14);
+      pb.line(cuff[0] - 1.4, cuff[1] + 0.3, cuff[0] + 1.4, cuff[1] - 0.2, 0.45, C.hilt);
+      if (front) pb.line(shoulder[0] - 0.4, shoulder[1] - 1.2, joint[0] - 0.4, joint[1] + 0.8, 0.3, C.tunicShade);
       seg(joint, end, 2.1, skin, skinShade, front ? C.skinLight : undefined);
       const wrist = lerp(joint, end, 0.72);
       pb.disc(wrist[0], wrist[1], 1.3, C.hilt); // gold bracelet
@@ -218,12 +235,31 @@ export function rasterize(pose: Pose, look: Look = 'prince'): Raster {
     pb.disc(chest[0] + 1.3, chest[1] - 2.6, 2.1, C.skinShade);
     pb.disc(chest[0] + 1.6, chest[1] - 2.9, 1.6, C.skin);
     pb.line(chest[0] + 0.2, chest[1] - 3.4, hip[0] + 1.6, hip[1] - 1.5, 0.5, C.hilt);
+    // Studs along the trim, a cross strap from the pauldron, and chest shading.
+    for (const t of [0.15, 0.4, 0.65]) {
+      const p = lerp([chest[0] + 0.2, chest[1] - 3.4], [hip[0] + 1.6, hip[1] - 1.5], t);
+      pb.disc(p[0], p[1], 0.4, C.hiltShade);
+    }
+    pb.line(shoulder[0] - 0.8, shoulder[1] - 1.4, hip[0] + 2.6, hip[1] - 0.6, 0.6, C.shoe);
+    pb.line(chest[0] + 0.4, chest[1] - 5.2, chest[0] + 2.6, chest[1] - 5.4, 0.3, C.skinShade);
   } else {
     // Cloth folds across the chest.
     pb.line(chest[0] - 1.8, chest[1] - 3.6, chest[0] + 2.2, chest[1] - 4.6, 0.35, C.tunicShade);
     pb.line(chest[0] - 2.0, chest[1] - 5.6, chest[0] + 1.8, chest[1] - 6.4, 0.35, C.tunicShade);
     pb.disc(chest[0] + 1.4, chest[1] - 2.5, 1.1, C.skinShade); // collar opening
     pb.disc(chest[0] + 1.6, chest[1] - 2.7, 0.8, C.skin);
+    // Embroidered front placket with buttons, a gold-edged hem and side vent.
+    const a: V = [chest[0] + 1.6, chest[1] - 3.4];
+    const b: V = [hip[0] + 1.5, hip[1] + 0.8];
+    pb.line(a[0], a[1], b[0], b[1], 0.55, C.hiltShade);
+    pb.line(a[0] + 0.2, a[1] - 0.1, b[0] + 0.2, b[1] - 0.1, 0.3, C.hilt);
+    for (const t of [0.2, 0.45, 0.7]) {
+      const p = lerp(a, b, t);
+      pb.disc(p[0] + 0.4, p[1], 0.38, C.hilt);
+    }
+    pb.line(hip[0] - 3.0, hip[1] - 1.0, hip[0] + 3.4, hip[1] - 1.5, 0.9, C.tunicShade);
+    pb.line(hip[0] - 3.0, hip[1] - 1.5, hip[0] + 3.4, hip[1] - 2.0, 0.35, C.hilt);
+    pb.line(hip[0] - 0.4, hip[1] - 0.8, hip[0] - 0.4, hip[1] + 1.4, 0.3, C.tunicShade);
   }
 
   // Sash (prince: knotted with tails) or a wide belt with a buckle (guard).
@@ -233,10 +269,14 @@ export function rasterize(pose: Pose, look: Look = 'prince'): Raster {
     pb.line(waist[0] - 4.1, waist[1], waist[0] + 4.1, waist[1] - 0.4, 2.4, C.sash);
     pb.disc(waist[0] + 1.6, waist[1] - 0.3, 1.1, C.hilt);
     pb.disc(waist[0] + 1.8, waist[1] - 0.5, 0.5, C.tunicLight);
+    for (const dx of [-3.2, -1.8, 3.2]) pb.disc(waist[0] + dx, waist[1] - 0.2, 0.35, C.hiltShade);
   } else {
     pb.line(waist[0] - 3.6, waist[1] + 0.2, waist[0] + 3.6, waist[1] - 0.2, 2.6, C.sashShade);
     pb.line(waist[0] - 3.5, waist[1], waist[0] + 3.5, waist[1] - 0.4, 1.8, C.sash);
     pb.line(waist[0] - 3.2, waist[1] - 0.5, waist[0] + 3.0, waist[1] - 0.9, 0.35, C.sashShade);
+    // Woven stripes across the sash.
+    for (const dx of [-1.8, -0.2, 1.4, 2.8]) pb.line(waist[0] + dx, waist[1] - 0.9, waist[0] + dx + 0.1, waist[1] + 0.6, 0.3, C.sashShade);
+    pb.line(waist[0] - 3.4, waist[1] - 0.2, waist[0] - 3.0, waist[1] + 1.0, 0.3, C.hilt);
     pb.disc(waist[0] - 3.2, waist[1] + 0.4, 1.3, C.sash);
     pb.line(waist[0] - 3.2, waist[1] + 0.8, waist[0] - 4.8, waist[1] + 4.4, 1.0, C.sash);
     pb.line(waist[0] - 3.0, waist[1] + 0.8, waist[0] - 2.4, waist[1] + 4.8, 1.0, C.sashShade);
