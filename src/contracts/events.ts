@@ -10,7 +10,8 @@ export interface GameEvents {
   'gate:opened': { id: string };
   'potion:collected': { id: string; kind: string };
   'checkpoint:reached': { id: string };
-  'level:completed': { timeRemaining: number };
+  // Remaining time is owned by the timer in the UI module, so it is not duplicated here.
+  'level:completed': Record<string, never>;
   'timer:tick': { remaining: number };
   'timer:expired': Record<string, never>;
   'sfx:play': { key: string };

@@ -1,5 +1,5 @@
 import { EMPTY_INPUT } from '../contracts';
-import type { DamageEvent, Entity, EventBus, Facing, InputState, WorldQuery } from '../contracts';
+import type { Body, DamageEvent, Entity, EventBus, Facing, InputState, WorldQuery } from '../contracts';
 import { TILE_SIZE, fallDamage } from '../world';
 import * as C from './constants';
 
@@ -30,7 +30,7 @@ export interface PlayerStart {
   facing: Facing;
 }
 
-export class Player implements Entity {
+export class Player implements Entity, Body {
   readonly id = 'player';
   /** Horizontal position in px (centre of the character). */
   x: number;
@@ -62,6 +62,14 @@ export class Player implements Entity {
 
   get tx(): number {
     return Math.floor(this.x / TILE_SIZE);
+  }
+
+  get grounded(): boolean {
+    return GROUNDED.has(this.state);
+  }
+
+  get crouching(): boolean {
+    return this.state === 'crouch';
   }
 
   applyDamage(e: DamageEvent): void {

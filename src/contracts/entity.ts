@@ -8,7 +8,7 @@ export interface Entity {
   update(dtTick: number): void;
 }
 
-export type DamageSource = 'sword' | 'fall' | 'spikes' | 'chomper';
+export type DamageSource = 'sword' | 'fall' | 'spikes' | 'chomper' | 'loose' | 'poison';
 
 export interface DamageEvent {
   target: string;
