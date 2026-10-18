@@ -23,6 +23,7 @@ export class UIScene extends Phaser.Scene {
   private messageUntil = 0;
   private shownPhase = '';
   private victoryPlayed = false;
+  private keepIndex = false;
 
   constructor() {
     super('UIScene');
@@ -38,6 +39,8 @@ export class UIScene extends Phaser.Scene {
     this.bound = undefined;
     this.shownPhase = '';
     this.input.keyboard?.on('keydown-M', () => audio().toggleMute());
+    // A clickable speaker icon in the HUD corner.
+    this.add.zone(306, 177, 16, 12).setInteractive({ useHandCursor: true }).on('pointerdown', () => audio().toggleMute());
     const onPad = (e: GamepadEvent): void => this.say(e.type === 'gamepadconnected' ? 'Gamepad connected.' : 'Gamepad disconnected.');
     window.addEventListener('gamepadconnected', onPad);
     window.addEventListener('gamepaddisconnected', onPad);
@@ -99,9 +102,22 @@ export class UIScene extends Phaser.Scene {
       action: () => {
         a.setVolume(ch, a.volumes[ch] >= 0.99 ? 0 : a.volumes[ch] + 0.2);
         this.shownPhase = '';
+        this.keepIndex = true;
       },
     });
-    return [step('master', 'Volume'), step('music', 'Music'), step('sfx', 'Effects')];
+    return [
+      {
+        label: `Sound: ${a.muted ? 'OFF' : 'ON'}`,
+        action: () => {
+          a.toggleMute();
+          this.shownPhase = '';
+          this.keepIndex = true;
+        },
+      },
+      step('master', 'Volume'),
+      step('music', 'Music'),
+      step('sfx', 'Effects'),
+    ];
   }
 
   update(): void {
@@ -123,7 +139,8 @@ export class UIScene extends Phaser.Scene {
       case 'paused':
         this.title.setText('PAUSED');
         this.sub.setText(`${left} remaining`);
-        this.menu.set([{ label: 'Resume', action: () => gs.resume() }, { label: 'Restart from checkpoint', action: () => gs.retry() }, ...this.volumeItems(), quit]);
+        this.menu.set([{ label: 'Resume', action: () => gs.resume() }, { label: 'Restart from checkpoint', action: () => gs.retry() }, ...this.volumeItems(), quit], this.keepIndex);
+        this.keepIndex = false;
         break;
       case 'dead':
         this.title.setText('YOU DIED');
@@ -154,6 +171,8 @@ export class UIScene extends Phaser.Scene {
     g.fillStyle(0x0c0c14).fillRect(0, STRIP_Y, 320, 200 - STRIP_Y);
     g.fillStyle(0x3a3448).fillRect(0, STRIP_Y, 320, 1).fillStyle(0x1e1a28).fillRect(0, STRIP_Y + 1, 320, 1);
 
+    this.speaker(g);
+
     for (let i = 0; i < Math.min(player.maxHp, MAX_HP_ICONS); i++) this.triangle(8 + i * 10, 192, i < player.hp, 0xd04050, 0xff9aa8);
 
     // Guard health appears only while one is awake on the prince's screen.
@@ -169,6 +188,20 @@ export class UIScene extends Phaser.Scene {
     if (now < this.messageUntil) this.strip.setText(this.message);
     else if (gs.phase === 'playing' && timerVisible(timer.remaining)) this.strip.setText(`${formatTime(timer.remaining)} remaining`);
     else this.strip.setText('');
+  }
+
+  /** Speaker icon; waves when sound is on, a red cross when muted. Clicking it (or pressing M) toggles. */
+  private speaker(g: Phaser.GameObjects.Graphics): void {
+    const x = 300;
+    const y = 173;
+    const muted = audio().muted;
+    g.fillStyle(muted ? 0x8a8090 : 0xe8d8a8);
+    g.fillRect(x, y + 3, 3, 4).fillTriangle(x + 3, y + 3, x + 3, y + 7, x + 8, y + 10).fillTriangle(x + 3, y + 3, x + 3, y + 7, x + 8, y);
+    if (muted) {
+      g.lineStyle(1, 0xe04050).lineBetween(x + 9, y + 2, x + 15, y + 8).lineBetween(x + 15, y + 2, x + 9, y + 8);
+    } else {
+      g.fillRect(x + 10, y + 3, 1, 4).fillRect(x + 12, y + 1, 1, 8);
+    }
   }
 
   /** An upward-pointing life marker; filled when the point is still there. */

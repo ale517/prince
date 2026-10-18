@@ -44,7 +44,7 @@ export class MenuScene extends Phaser.Scene {
     const controls = pixelText(this, 160, 100, 6, '#b0b0c8', true).setVisible(false);
     controls.setText(CONTROLS.join('\n'));
     const menu = new Menu(this, 160, 84);
-    const main = (): void => {
+    const main = (keep = false): void => {
       controls.setVisible(false);
       menu.set([
         { label: 'New Game', action: () => this.scene.start('GameScene', { levelId: 'hazard' } satisfies GameSceneData) },
@@ -54,13 +54,20 @@ export class MenuScene extends Phaser.Scene {
           action: () => save && this.scene.start('GameScene', { levelId: isLevelId(save.levelId) ? save.levelId : 'hazard', save, keepTime: save.timeRemaining } satisfies GameSceneData),
         },
         {
+          label: `Sound: ${audio().muted ? 'OFF' : 'ON'}`,
+          action: () => {
+            audio().toggleMute();
+            main(true);
+          },
+        },
+        {
           label: 'Controls',
           action: () => {
             controls.setVisible(true);
-            menu.set([{ label: 'Back', action: main }]);
+            menu.set([{ label: 'Back', action: () => main() }]);
           },
         },
-      ]);
+      ], keep);
     };
     main();
   }

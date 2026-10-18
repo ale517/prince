@@ -49,9 +49,9 @@ export class Menu {
     return this.items.length > 0;
   }
 
-  set(items: MenuItem[]): void {
+  set(items: MenuItem[], keepIndex = false): void {
     this.items = items;
-    this.index = Math.max(0, items.findIndex((i) => i.enabled !== false));
+    this.index = keepIndex ? Math.min(this.index, Math.max(0, items.length - 1)) : Math.max(0, items.findIndex((i) => i.enabled !== false));
     this.rows.forEach((r) => r.destroy());
     this.rows.length = 0;
     items.forEach((_, i) => this.rows.push(pixelText(this.scene, this.x, this.y + i * this.gap, this.size, '#e8d8a8', true).setDepth(20)));
