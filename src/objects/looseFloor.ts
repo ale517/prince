@@ -1,6 +1,6 @@
 import type { LevelObject, ObjectContext, ObjectDef } from '../contracts';
 import { LOOSE_FALL_DAMAGE, LOOSE_SHAKE_TICKS } from './constants';
-import { groundedAt } from './props';
+import { groundedAt, restoreFields } from './props';
 
 export class LooseFloor implements LevelObject {
   readonly id: string;
@@ -48,5 +48,9 @@ export class LooseFloor implements LevelObject {
 
   serialize(): Record<string, unknown> {
     return { shaking: this.shaking, timer: this.timer, fallen: this.fallen };
+  }
+
+  restore(state: Record<string, unknown>): void {
+    restoreFields(this, state, ['shaking', 'timer', 'fallen']);
   }
 }

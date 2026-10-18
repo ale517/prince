@@ -1,5 +1,5 @@
 import type { LevelObject, ObjectContext, ObjectDef } from '../contracts';
-import { groundedAt, strProp } from './props';
+import { groundedAt, restoreFields, strProp } from './props';
 
 export type PotionKind = 'small' | 'large' | 'poison';
 
@@ -32,5 +32,9 @@ export class Potion implements LevelObject {
 
   serialize(): Record<string, unknown> {
     return { consumed: this.consumed };
+  }
+
+  restore(state: Record<string, unknown>): void {
+    restoreFields(this, state, ['consumed']);
   }
 }

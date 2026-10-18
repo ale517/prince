@@ -143,6 +143,17 @@ export class Player implements Combatant, Body {
     this.hp = this.maxHp;
   }
 
+  /** Puts a freshly created player back where a checkpoint recorded him. */
+  restoreState(s: { x: number; ty: number; facing: Facing; hp: number; maxHp: number; hasSword: boolean }): void {
+    this.x = s.x;
+    this.ty = s.ty;
+    this.facing = s.facing;
+    this.maxHp = s.maxHp;
+    this.hp = Math.max(1, Math.min(s.hp, s.maxHp));
+    this.hasSword = s.hasSword;
+    this.setState('idle');
+  }
+
   update(_dtTick: number = 1): void {
     if (this.state === 'dead') return;
     if (GROUNDED.has(this.state) && !this.world.groundAt(this.tx, this.ty)) {

@@ -1,6 +1,6 @@
 import type { LevelObject, ObjectContext, ObjectDef } from '../contracts';
 import { GATE_CLOSE_TICKS, GATE_DEFAULT_HOLD_TICKS, GATE_OPEN_TICKS } from './constants';
-import { numProp } from './props';
+import { numProp, restoreFields } from './props';
 
 export class Gate implements LevelObject {
   readonly id: string;
@@ -35,5 +35,9 @@ export class Gate implements LevelObject {
 
   serialize(): Record<string, unknown> {
     return { openness: this.openness, hold: this.hold };
+  }
+
+  restore(state: Record<string, unknown>): void {
+    restoreFields(this, state, ['openness', 'hold']);
   }
 }

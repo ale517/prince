@@ -51,4 +51,6 @@ export interface LevelObject {
   /** Permanently presses a plate (e.g. rubble from a loose floor landing on it). */
   poke?(): void;
   serialize(): Record<string, unknown>;
+  /** Re-applies a state previously returned by serialize(), on a freshly built object. */
+  restore?(state: Record<string, unknown>): void;
 }

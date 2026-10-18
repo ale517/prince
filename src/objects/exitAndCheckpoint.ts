@@ -1,5 +1,5 @@
 import type { LevelObject, ObjectContext, ObjectDef } from '../contracts';
-import { groundedAt } from './props';
+import { groundedAt, restoreFields } from './props';
 
 export class ExitDoor implements LevelObject {
   readonly id: string;
@@ -29,6 +29,10 @@ export class ExitDoor implements LevelObject {
   serialize(): Record<string, unknown> {
     return { open: this.open, completed: this.completed };
   }
+
+  restore(state: Record<string, unknown>): void {
+    restoreFields(this, state, ['open', 'completed']);
+  }
 }
 
 export class Checkpoint implements LevelObject {
@@ -52,5 +56,9 @@ export class Checkpoint implements LevelObject {
 
   serialize(): Record<string, unknown> {
     return { reached: this.reached };
+  }
+
+  restore(state: Record<string, unknown>): void {
+    restoreFields(this, state, ['reached']);
   }
 }

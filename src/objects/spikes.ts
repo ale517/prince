@@ -1,6 +1,6 @@
 import type { LevelObject, ObjectContext, ObjectDef } from '../contracts';
 import { SPIKE_EXTEND_TICKS, SPIKE_UP_TICKS, LETHAL } from './constants';
-import { groundedAt } from './props';
+import { groundedAt, restoreFields } from './props';
 
 /** Tile.state values, also read by the renderer. */
 export const SpikePhase = { Hidden: 0, Extending: 1, Up: 2, Retracting: 3 } as const;
@@ -53,5 +53,9 @@ export class Spikes implements LevelObject {
 
   serialize(): Record<string, unknown> {
     return { phase: this.phase, timer: this.timer };
+  }
+
+  restore(state: Record<string, unknown>): void {
+    restoreFields(this, state, ['phase', 'timer']);
   }
 }

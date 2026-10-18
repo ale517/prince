@@ -15,6 +15,14 @@ export function listProp(def: ObjectDef, key: string): string[] {
   return Array.isArray(v) ? v : [];
 }
 
+/** Copies saved fields onto an object, ignoring unknown keys and values of the wrong type. */
+export function restoreFields(target: object, state: Record<string, unknown>, keys: readonly string[]): void {
+  const t = target as Record<string, unknown>;
+  for (const k of keys) {
+    if (typeof state[k] === typeof t[k]) t[k] = state[k];
+  }
+}
+
 /** Bodies standing on the given tile; airborne bodies pass over traps. */
 export function groundedAt(ctx: ObjectContext, tx: number, ty: number): Body[] {
   return ctx.bodies.filter((b) => b.grounded && b.tx === tx && b.ty === ty);

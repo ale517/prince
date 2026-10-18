@@ -1,5 +1,5 @@
 import type { LevelObject, ObjectContext, ObjectDef } from '../contracts';
-import { groundedAt, listProp } from './props';
+import { groundedAt, listProp, restoreFields } from './props';
 
 export class PressurePlate implements LevelObject {
   readonly id: string;
@@ -30,5 +30,9 @@ export class PressurePlate implements LevelObject {
 
   serialize(): Record<string, unknown> {
     return { latched: this.latched };
+  }
+
+  restore(state: Record<string, unknown>): void {
+    restoreFields(this, state, ['latched']);
   }
 }
