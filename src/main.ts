@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { RENDER_SCALE, WORLD_H, WORLD_W } from './config';
 import { GameScene } from './scenes/GameScene';
+import { MenuScene } from './scenes/MenuScene';
+import { UIScene } from './scenes/UIScene';
 
 // Sprites carry sub-pixel detail, so pixel-perfect scaling is still done by the browser (spec 08).
 new Phaser.Game({
@@ -11,5 +13,5 @@ new Phaser.Game({
   pixelArt: true,
   backgroundColor: '#101018',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [GameScene],
+  scene: [MenuScene, GameScene, UIScene],
 });

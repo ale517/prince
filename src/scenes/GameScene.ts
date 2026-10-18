@@ -4,16 +4,19 @@ import type { Img, PrinceFrame } from '../art';
 import type { Guard } from '../combat';
 import type { Tile } from '../contracts';
 import { KeyboardInput } from '../input';
-import { DUEL_LEVEL, HAZARD_LEVEL, HAZARD_OBJECTS, MIRROR, MIRROR_LEVEL, TEST_LEVEL, duelGuards, parseAscii } from '../level';
 import { RENDER_SCALE } from '../config';
 import { Potion, SpikePhase } from '../objects';
 import { TICK_RATE } from '../player';
 import type { PlayerState } from '../player';
-import { Simulation } from '../sim';
+import { clearSave, writeSave } from '../save';
+import type { KeyValueStore, SaveData } from '../save';
+import type { Simulation } from '../sim';
 import { SCREEN_TILES_H, SCREEN_TILES_W, TILE_SIZE } from '../world';
+import { buildSim, isLevelId } from './levels';
+import type { LevelId } from './levels';
 
 const TICK_MS = 1000 / TICK_RATE;
-const VIEW_Y = 20; // leaves room above the 3-row screen for the HUD later
+const VIEW_Y = 20; // room above the 3-row screen for the message strip
 const SLAB_Y = 24; // floor slab offset inside a tile; characters stand on top of it
 const COLORS = {
   potion: { small: 0xd04050, large: 0xe05080, poison: 0x50c050 },
@@ -35,31 +38,43 @@ const SHADOW_PALETTE: Record<number, number> = Object.fromEntries(
   }),
 );
 
-function startLevel(): Simulation {
-  // ?level=move loads the plain movement arena, ?level=duel[&skill=1..5] a sword fight, ?level=mirror the shadow; hazards are the default.
-  const q = new URLSearchParams(window.location.search);
-  const level = q.get('level');
-  if (level === 'mirror') return new Simulation(parseAscii(MIRROR_LEVEL, [], { hasSword: true, mirror: MIRROR }));
-  if (level === 'duel') {
-    const skill = Math.min(5, Math.max(1, Number(q.get('skill')) || 1)) as 1 | 2 | 3 | 4 | 5;
-    return new Simulation(parseAscii(DUEL_LEVEL, [], { hasSword: true, guards: duelGuards(skill) }), Number(q.get('seed')) || 1);
-  }
-  return new Simulation(level === 'move' ? parseAscii(TEST_LEVEL) : parseAscii(HAZARD_LEVEL, HAZARD_OBJECTS));
+export type GamePhase = 'playing' | 'paused' | 'dead' | 'timeup' | 'won';
+
+export interface GameSceneData {
+  levelId?: LevelId;
+  /** Checkpoint to resume from. */
+  save?: SaveData;
+  /** Seconds left to carry over (a retry does not refund time). */
+  keepTime?: number;
 }
 
+const storage = (): KeyValueStore | undefined => {
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
+};
+
 export class GameScene extends Phaser.Scene {
-  private sim!: Simulation;
+  sim!: Simulation;
+  phase: GamePhase = 'playing';
+  levelId: LevelId = 'hazard';
+  private lastSave?: SaveData;
+  private initData: GameSceneData = {};
   private keys!: KeyboardInput;
   private gfx!: Phaser.GameObjects.Graphics;
-  private debug!: Phaser.GameObjects.Text;
-  private banner!: Phaser.GameObjects.Text;
+  private debug?: Phaser.GameObjects.Text;
   private acc = 0;
-  private completed = false;
   private pool: Phaser.GameObjects.Image[] = [];
   private poolUsed = 0;
 
   constructor() {
     super('GameScene');
+  }
+
+  init(data: GameSceneData): void {
+    this.initData = data ?? {};
   }
 
   /** Uploads the procedural environment art once as nearest-filtered textures. */
@@ -99,31 +114,92 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.sim = startLevel();
-    this.completed = false;
+    const q = new URLSearchParams(window.location.search);
+    const queryLevel = q.get('level');
+    this.levelId = this.initData.levelId ?? (isLevelId(queryLevel) ? queryLevel : 'hazard');
+    this.sim = buildSim(this.levelId, q);
+    this.lastSave = this.initData.save;
+    if (this.initData.save) this.sim.restore(this.initData.save);
+    if (this.initData.keepTime !== undefined) this.sim.timer.set(this.initData.keepTime);
+    this.phase = 'playing';
+    this.acc = 0;
     this.pool = [];
     this.buildTextures();
-    this.sim.bus.on('level:completed', () => (this.completed = true));
+
+    const bus = this.sim.bus;
+    bus.on('level:completed', () => {
+      if (this.phase !== 'playing') return;
+      this.phase = 'won';
+      clearSave(storage());
+    });
+    bus.on('player:died', () => {
+      if (this.phase === 'playing') this.phase = 'dead';
+    });
+    bus.on('timer:expired', () => {
+      if (this.phase === 'playing') this.phase = 'timeup';
+    });
+    // Reaching a checkpoint records the state to resume from, and autosaves it.
+    bus.on('checkpoint:reached', ({ id }) => {
+      this.lastSave = this.sim.snapshot(this.levelId, id);
+      writeSave(storage(), this.lastSave);
+    });
+
     this.keys = new KeyboardInput(this);
     this.gfx = this.add.graphics().setDepth(0);
     // Zoom around the top-left corner so world coordinates still start at (0,0).
     this.cameras.main.setZoom(RENDER_SCALE).centerOn(160, 100);
-    // Text is rendered at full resolution and scaled back down, otherwise the zoom would blur it.
-    this.debug = this.add.text(4, 150, '', { fontSize: `${8 * RENDER_SCALE}px`, color: '#9a9ab0' }).setScale(1 / RENDER_SCALE);
-    this.banner = this.add
-      .text(160, 8, '', { fontSize: `${10 * RENDER_SCALE}px`, color: '#e8d8a8' })
-      .setOrigin(0.5, 0)
-      .setScale(1 / RENDER_SCALE);
-    this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.R).on('down', () => this.scene.restart());
+    if (q.has('debug')) {
+      // Text is rendered at full resolution and scaled back down, otherwise the zoom would blur it.
+      this.debug = this.add.text(4, 124, '', { fontSize: `${6 * RENDER_SCALE}px`, color: '#9a9ab0' }).setScale(1 / RENDER_SCALE);
+    }
+    const kb = this.input.keyboard;
+    kb?.addKey(Phaser.Input.Keyboard.KeyCodes.R).on('down', () => this.retry());
+    for (const code of [Phaser.Input.Keyboard.KeyCodes.ESC, Phaser.Input.Keyboard.KeyCodes.P]) {
+      kb?.addKey(code).on('down', () => this.togglePause());
+    }
+    if (!this.scene.isActive('UIScene')) this.scene.launch('UIScene');
+  }
+
+  togglePause(): void {
+    if (this.phase === 'playing') this.phase = 'paused';
+    else if (this.phase === 'paused') this.phase = 'playing';
+  }
+
+  resume(): void {
+    if (this.phase === 'paused') this.phase = 'playing';
+  }
+
+  /** Restarts at the last checkpoint (or the level start); the clock keeps running, except after time-up. */
+  retry(): void {
+    this.scene.restart({
+      levelId: this.levelId,
+      save: this.lastSave,
+      keepTime: this.phase === 'timeup' ? undefined : this.sim.timer.remaining,
+    } satisfies GameSceneData);
+  }
+
+  /** Starts the level over from the beginning with a full clock. */
+  newGame(): void {
+    clearSave(storage());
+    this.scene.restart({ levelId: this.levelId } satisfies GameSceneData);
+  }
+
+  quit(): void {
+    this.scene.stop('UIScene');
+    this.scene.start('MenuScene');
   }
 
   update(_time: number, delta: number): void {
-    this.keys.sample();
-    // Fixed timestep: render every frame, advance the simulation at TICK_RATE.
-    this.acc = Math.min(this.acc + delta, TICK_MS * 5);
-    while (this.acc >= TICK_MS) {
-      this.acc -= TICK_MS;
-      this.sim.step(this.keys.poll());
+    if (this.phase === 'playing') {
+      this.keys.sample();
+      // Fixed timestep: render every frame, advance the simulation at TICK_RATE.
+      this.acc = Math.min(this.acc + delta, TICK_MS * 5);
+      while (this.acc >= TICK_MS && this.phase === 'playing') {
+        this.acc -= TICK_MS;
+        this.sim.step(this.keys.poll());
+      }
+    } else {
+      this.acc = 0;
     }
     this.draw();
   }
@@ -283,12 +359,10 @@ export class GameScene extends Phaser.Scene {
     }
     const sprite = princeFrame(player.state, player.frame, player.landDuration, player.fallPhase);
     this.drawFighter(sprite, px, feet + 0, player.facing, PALETTE);
-    this.banner.setText(this.completed ? 'LEVEL COMPLETE - press R' : player.state === 'dead' ? 'YOU DIED - press R' : '');
     const g0 = this.sim.guards[0];
-    this.debug.setText(
-      `${player.state}  tile ${player.tx},${player.ty}  hp ${player.hp}/${player.maxHp}  tick ${this.sim.tick}` +
-        (g0 ? `  guard ${g0.state}/${g0.fightAction} hp ${g0.hp}` : '') +
-        '\nArrows/WASD move  Shift step  Up jump  Down crouch/drink  Space sword/strike  Up parry  R restart',
+    this.debug?.setText(
+      `${player.state}  tile ${player.tx},${player.ty}  hp ${player.hp}/${player.maxHp}  tick ${this.sim.tick}  ${this.phase}` +
+        (g0 ? `  guard ${g0.state}/${g0.fightAction} hp ${g0.hp}` : ''),
     );
   }
 }
