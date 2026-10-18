@@ -1,36 +1,57 @@
 import Phaser from 'phaser';
+import type { Tile } from '../contracts';
 import { KeyboardInput } from '../input';
-import { TEST_LEVEL, parseAscii } from '../level';
+import { HAZARD_LEVEL, HAZARD_OBJECTS, TEST_LEVEL, parseAscii } from '../level';
+import { Potion, SpikePhase } from '../objects';
 import { TICK_RATE } from '../player';
 import { Simulation } from '../sim';
 import { SCREEN_TILES_H, SCREEN_TILES_W, TILE_SIZE } from '../world';
 
 const TICK_MS = 1000 / TICK_RATE;
 const VIEW_Y = 20; // leaves room above the 3-row screen for the HUD later
+const SLAB_Y = 24; // floor slab offset inside a tile; characters stand on top of it
 const COLORS = {
   floor: 0x8a7a5a,
   wall: 0x4a4a5a,
-  other: 0xaa5555,
+  spike: 0xc8c8d8,
+  gate: 0x6a8a9a,
+  blade: 0xd05050,
+  plateUp: 0x7a6a4a,
+  plateDown: 0x5a8a5a,
+  exitShut: 0x553322,
+  exitOpen: 0xe8c860,
   player: 0xe8d8a8,
   dead: 0x884444,
+  potion: { small: 0xd04050, large: 0xe05080, poison: 0x50c050 },
 };
+
+function startLevel(): Simulation {
+  // ?level=move loads the plain movement arena; the hazard level is the default.
+  const useMove = new URLSearchParams(window.location.search).get('level') === 'move';
+  return new Simulation(useMove ? parseAscii(TEST_LEVEL) : parseAscii(HAZARD_LEVEL, HAZARD_OBJECTS));
+}
 
 export class GameScene extends Phaser.Scene {
   private sim!: Simulation;
   private keys!: KeyboardInput;
   private gfx!: Phaser.GameObjects.Graphics;
   private debug!: Phaser.GameObjects.Text;
+  private banner!: Phaser.GameObjects.Text;
   private acc = 0;
+  private completed = false;
 
   constructor() {
     super('GameScene');
   }
 
   create(): void {
-    this.sim = new Simulation(parseAscii(TEST_LEVEL));
+    this.sim = startLevel();
+    this.completed = false;
+    this.sim.bus.on('level:completed', () => (this.completed = true));
     this.keys = new KeyboardInput(this);
     this.gfx = this.add.graphics();
     this.debug = this.add.text(4, 150, '', { fontSize: '8px', color: '#9a9ab0' });
+    this.banner = this.add.text(160, 8, '', { fontSize: '10px', color: '#e8d8a8' }).setOrigin(0.5, 0);
     this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.R).on('down', () => this.scene.restart());
   }
 
@@ -45,39 +66,93 @@ export class GameScene extends Phaser.Scene {
     this.draw();
   }
 
+  private drawTile(t: Tile, x: number, y: number): void {
+    const g = this.gfx;
+    const slab = (color: number, h = 8) => g.fillStyle(color).fillRect(x, y + SLAB_Y + (8 - h), TILE_SIZE, h);
+
+    switch (t.type) {
+      case 'wall':
+      case 'pillar':
+        g.fillStyle(COLORS.wall).fillRect(x, y, TILE_SIZE, TILE_SIZE);
+        break;
+      case 'loose': {
+        // Shake sideways by a pixel while crumbling.
+        const dx = t.state === 1 ? (this.sim.tick % 2 === 0 ? -1 : 1) : 0;
+        g.fillStyle(COLORS.floor).fillRect(x + dx, y + SLAB_Y, TILE_SIZE, 8);
+        g.fillStyle(0x5a4a30).fillRect(x + dx + 8, y + SLAB_Y + 3, 16, 1);
+        break;
+      }
+      case 'spikes': {
+        slab(COLORS.floor);
+        const h = t.state === SpikePhase.Up ? 14 : t.state === SpikePhase.Hidden ? 0 : 7;
+        for (let i = 0; i < 4 && h > 0; i++) {
+          g.fillStyle(COLORS.spike).fillTriangle(x + i * 8, y + SLAB_Y, x + i * 8 + 4, y + SLAB_Y - h, x + i * 8 + 8, y + SLAB_Y);
+        }
+        break;
+      }
+      case 'gate': {
+        slab(COLORS.floor);
+        // Gate state is openness (0 closed .. 1 open); the portcullis lifts as it opens.
+        const h = Math.round((1 - t.state) * SLAB_Y);
+        if (h > 0) g.fillStyle(COLORS.gate).fillRect(x + 12, y + SLAB_Y - h, 8, h);
+        break;
+      }
+      case 'plate':
+        slab(COLORS.floor);
+        g.fillStyle(t.state ? COLORS.plateDown : COLORS.plateUp).fillRect(x + 6, y + SLAB_Y - (t.state ? 0 : 2), 20, t.state ? 2 : 4);
+        break;
+      case 'chomper': {
+        slab(COLORS.floor);
+        // 0 open, 1 closing/opening, 2 closed
+        const h = t.state === 2 ? 24 : t.state === 1 ? 12 : 4;
+        g.fillStyle(COLORS.blade).fillRect(x + 4, y + SLAB_Y - h, 6, h).fillRect(x + 22, y + SLAB_Y - h, 6, h);
+        if (t.state === 2) g.fillRect(x + 4, y + SLAB_Y - 24, 24, 4);
+        break;
+      }
+      case 'exit':
+        slab(COLORS.floor);
+        g.fillStyle(t.state ? COLORS.exitOpen : COLORS.exitShut).fillRect(x + 6, y + 2, 20, SLAB_Y - 2);
+        break;
+      case 'floor':
+        slab(COLORS.floor);
+        break;
+      default:
+        break;
+    }
+  }
+
   private draw(): void {
     const { grid, player } = this.sim;
-    const sx = Math.floor(player.tx / SCREEN_TILES_W);
-    const sy = Math.floor(player.ty / SCREEN_TILES_H);
-    const ox = sx * SCREEN_TILES_W;
-    const oy = sy * SCREEN_TILES_H;
+    const ox = Math.floor(player.tx / SCREEN_TILES_W) * SCREEN_TILES_W;
+    const oy = Math.floor(player.ty / SCREEN_TILES_H) * SCREEN_TILES_H;
 
     this.gfx.clear();
     for (let ty = 0; ty < SCREEN_TILES_H; ty++) {
       for (let tx = 0; tx < SCREEN_TILES_W; tx++) {
         const t = grid.get(ox + tx, oy + ty);
-        if (t.type === 'empty') continue;
-        const x = tx * TILE_SIZE;
-        const y = VIEW_Y + ty * TILE_SIZE;
-        if (t.type === 'wall' || t.type === 'pillar') {
-          this.gfx.fillStyle(COLORS.wall).fillRect(x, y, TILE_SIZE, TILE_SIZE);
-        } else {
-          // Floor is a slab at the bottom of its cell; characters stand on top of it.
-          this.gfx.fillStyle(t.type === 'floor' ? COLORS.floor : COLORS.other).fillRect(x, y + 24, TILE_SIZE, 8);
-        }
+        if (t.type !== 'empty') this.drawTile(t, tx * TILE_SIZE, VIEW_Y + ty * TILE_SIZE);
       }
     }
 
+    for (const o of this.sim.objects) {
+      if (!(o instanceof Potion) || o.consumed) continue;
+      if (o.tx < ox || o.tx >= ox + SCREEN_TILES_W || o.ty < oy || o.ty >= oy + SCREEN_TILES_H) continue;
+      const x = (o.tx - ox) * TILE_SIZE + 16;
+      const y = VIEW_Y + (o.ty - oy) * TILE_SIZE + SLAB_Y;
+      this.gfx.fillStyle(COLORS.potion[o.kind]).fillRect(x - 3, y - 8, 6, 8).fillRect(x - 1, y - 11, 2, 3);
+    }
+
     const px = player.x - ox * TILE_SIZE;
-    const feet = VIEW_Y + (player.ty - oy) * TILE_SIZE + 24;
+    const feet = VIEW_Y + (player.ty - oy) * TILE_SIZE + SLAB_Y;
     const h = player.state === 'crouch' ? 18 : 30;
     this.gfx.fillStyle(player.state === 'dead' ? COLORS.dead : COLORS.player).fillRect(px - 6, feet - h, 12, h);
     // Nose pixel shows facing direction.
     this.gfx.fillStyle(0x202030).fillRect(px + (player.facing === 1 ? 2 : -6), feet - h + 4, 4, 3);
 
+    this.banner.setText(this.completed ? 'LEVEL COMPLETE - press R' : player.state === 'dead' ? 'YOU DIED - press R' : '');
     this.debug.setText(
       `${player.state}  tile ${player.tx},${player.ty}  hp ${player.hp}/${player.maxHp}  tick ${this.sim.tick}\n` +
-        'Arrows/WASD move  Shift step  Up jump  Down crouch/drop  R restart',
+        'Arrows/WASD move  Shift step  Up jump  Down crouch/drink  R restart',
     );
   }
 }
