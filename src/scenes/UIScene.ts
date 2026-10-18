@@ -4,7 +4,8 @@ import { formatTime, timerVisible } from '../save';
 import type { Simulation } from '../sim';
 import { SCREEN_TILES_H, SCREEN_TILES_W } from '../world';
 import type { GameScene } from './GameScene';
-import { Menu, pixelText } from './menu';
+import { audio } from '../audio';
+import { Menu, pixelText, type MenuItem } from './menu';
 
 const MESSAGE_MS = 2600;
 const STRIP_Y = 170;
@@ -21,6 +22,7 @@ export class UIScene extends Phaser.Scene {
   private message = '';
   private messageUntil = 0;
   private shownPhase = '';
+  private victoryPlayed = false;
 
   constructor() {
     super('UIScene');
@@ -35,6 +37,7 @@ export class UIScene extends Phaser.Scene {
     this.menu = new Menu(this, 160, 84);
     this.bound = undefined;
     this.shownPhase = '';
+    this.input.keyboard?.on('keydown-M', () => audio().toggleMute());
   }
 
   private gameScene(): GameScene {
@@ -56,6 +59,42 @@ export class UIScene extends Phaser.Scene {
     sim.bus.on('gate:opened', () => this.say('A gate rumbles open.'));
     sim.bus.on('shadow:appeared', () => this.say('Your reflection steps out of the mirror!'));
     sim.bus.on('shadow:merged', () => this.say('You and your shadow are one.'));
+
+    const sfx = audio();
+    sim.bus.on('sfx:play', ({ key }) => sfx.play(key));
+    sim.bus.on('potion:collected', () => sfx.play('potion'));
+    sim.bus.on('checkpoint:reached', () => sfx.play('checkpoint'));
+    sim.bus.on('gate:opened', () => sfx.play('gate'));
+    sim.bus.on('trap:triggered', ({ type }) => sfx.play(type === 'spikes' ? 'spike' : type === 'chomper' ? 'chomper' : 'crumble'));
+    sim.bus.on('player:damaged', () => sfx.play('hurt'));
+    sim.bus.on('player:died', () => sfx.play('death'));
+    sim.bus.on('shadow:appeared', () => sfx.play('shadow'));
+  }
+
+  private updateMusic(gs: GameScene, fighting: boolean): void {
+    const a = audio();
+    if (gs.phase === 'won') {
+      if (a.currentSong !== 'victory' && !this.victoryPlayed) {
+        this.victoryPlayed = true;
+        a.playMusic('victory');
+      }
+      return;
+    }
+    this.victoryPlayed = false;
+    if (gs.phase === 'dead' || gs.phase === 'timeup') a.stopMusic();
+    else a.playMusic(fighting ? 'fight' : 'dungeon');
+  }
+
+  private volumeItems(): MenuItem[] {
+    const a = audio();
+    const step = (ch: 'master' | 'music' | 'sfx', label: string): MenuItem => ({
+      label: `${label}: ${Math.round(a.volumes[ch] * 100)}%`,
+      action: () => {
+        a.setVolume(ch, a.volumes[ch] >= 0.99 ? 0 : a.volumes[ch] + 0.2);
+        this.shownPhase = '';
+      },
+    });
+    return [step('master', 'Volume'), step('music', 'Music'), step('sfx', 'Effects')];
   }
 
   update(): void {
@@ -77,7 +116,7 @@ export class UIScene extends Phaser.Scene {
       case 'paused':
         this.title.setText('PAUSED');
         this.sub.setText(`${left} remaining`);
-        this.menu.set([{ label: 'Resume', action: () => gs.resume() }, { label: 'Restart from checkpoint', action: () => gs.retry() }, quit]);
+        this.menu.set([{ label: 'Resume', action: () => gs.resume() }, { label: 'Restart from checkpoint', action: () => gs.retry() }, ...this.volumeItems(), quit]);
         break;
       case 'dead':
         this.title.setText('YOU DIED');
@@ -119,6 +158,7 @@ export class UIScene extends Phaser.Scene {
     if (foe) for (let i = 0; i < foe.hp; i++) this.triangle(312 - i * 10, 192, true, 0x4a5fa8, 0x9ab0ff);
 
     const now = this.time.now;
+    this.updateMusic(gs, !!foe);
     if (now < this.messageUntil) this.strip.setText(this.message);
     else if (gs.phase === 'playing' && timerVisible(timer.remaining)) this.strip.setText(`${formatTime(timer.remaining)} remaining`);
     else this.strip.setText('');

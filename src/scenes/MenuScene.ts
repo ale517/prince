@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { audio } from '../audio';
 import { RENDER_SCALE } from '../config';
 import { loadSave } from '../save';
 import type { GameSceneData } from './GameScene';
@@ -36,6 +37,7 @@ export class MenuScene extends Phaser.Scene {
     const save = loadSave(storage);
 
     this.cameras.main.setZoom(RENDER_SCALE).centerOn(160, 100);
+    audio().playMusic('dungeon');
     pixelText(this, 160, 34, 18, '#e8c860', true).setText('PERSIAN PRINCE');
     pixelText(this, 160, 58, 7, '#8a8aa0', true).setText('an original tribute');
 
