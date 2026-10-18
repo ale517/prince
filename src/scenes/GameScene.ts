@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
-import { GUARD_PALETTE, ORIGIN_X, ORIGIN_Y, PALETTE, SCALE, SPRITE_W, princeFrame } from '../art';
-import type { PrinceFrame } from '../art';
+import { GUARD_PALETTE, ORIGIN_X, ORIGIN_Y, PALETTE, SCALE, SPRITE_W, buildEnvironment, hasTorch, princeFrame, variantAt } from '../art';
+import type { Img, PrinceFrame } from '../art';
 import type { Guard } from '../combat';
 import type { Tile } from '../contracts';
 import { KeyboardInput } from '../input';
@@ -16,17 +16,6 @@ const TICK_MS = 1000 / TICK_RATE;
 const VIEW_Y = 20; // leaves room above the 3-row screen for the HUD later
 const SLAB_Y = 24; // floor slab offset inside a tile; characters stand on top of it
 const COLORS = {
-  floor: 0x8a7a5a,
-  wall: 0x4a4a5a,
-  spike: 0xc8c8d8,
-  gate: 0x6a8a9a,
-  blade: 0xd05050,
-  plateUp: 0x7a6a4a,
-  plateDown: 0x5a8a5a,
-  exitShut: 0x553322,
-  exitOpen: 0xe8c860,
-  player: 0xe8d8a8,
-  dead: 0x884444,
   potion: { small: 0xd04050, large: 0xe05080, poison: 0x50c050 },
 };
 
@@ -66,17 +55,57 @@ export class GameScene extends Phaser.Scene {
   private banner!: Phaser.GameObjects.Text;
   private acc = 0;
   private completed = false;
+  private pool: Phaser.GameObjects.Image[] = [];
+  private poolUsed = 0;
 
   constructor() {
     super('GameScene');
   }
 
+  /** Uploads the procedural environment art once as nearest-filtered textures. */
+  private buildTextures(): void {
+    if (this.textures.exists('env:back0')) return;
+    const env = buildEnvironment();
+    const add = (key: string, img: Img): void => {
+      const tex = this.textures.createCanvas(`env:${key}`, img.w, img.h);
+      if (!tex) return;
+      tex.getContext().putImageData(new ImageData(new Uint8ClampedArray(img.data), img.w, img.h), 0, 0);
+      tex.refresh();
+      tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    };
+    env.back.forEach((im, i) => add(`back${i}`, im));
+    env.wall.forEach((im, i) => add(`wall${i}`, im));
+    env.floor.forEach((im, i) => add(`floor${i}`, im));
+    add('loose', env.loose);
+    add('plateUp', env.plateUp);
+    add('plateDown', env.plateDown);
+    add('pillar', env.pillar);
+    add('mirror', env.mirror);
+    add('mirrorActive', env.mirrorActive);
+    add('exitShut', env.exitShut);
+    add('exitOpen', env.exitOpen);
+    add('torch', env.torch);
+  }
+
+  /** Places a pooled image; depth orders layers (back wall < tiles < props < the graphics layer). */
+  private put(key: string, x: number, y: number, depth: number): void {
+    let img = this.pool[this.poolUsed];
+    if (!img) {
+      img = this.add.image(0, 0, `env:${key}`).setOrigin(0, 0).setScale(1 / SCALE);
+      this.pool.push(img);
+    }
+    this.poolUsed++;
+    img.setTexture(`env:${key}`).setPosition(x, y).setDepth(depth).setVisible(true);
+  }
+
   create(): void {
     this.sim = startLevel();
     this.completed = false;
+    this.pool = [];
+    this.buildTextures();
     this.sim.bus.on('level:completed', () => (this.completed = true));
     this.keys = new KeyboardInput(this);
-    this.gfx = this.add.graphics();
+    this.gfx = this.add.graphics().setDepth(0);
     // Zoom around the top-left corner so world coordinates still start at (0,0).
     this.cameras.main.setZoom(RENDER_SCALE).centerOn(160, 100);
     // Text is rendered at full resolution and scaled back down, otherwise the zoom would blur it.
@@ -99,59 +128,94 @@ export class GameScene extends Phaser.Scene {
     this.draw();
   }
 
-  private drawTile(t: Tile, x: number, y: number): void {
+  private drawTile(t: Tile, x: number, y: number, wx: number, wy: number): void {
     const g = this.gfx;
-    const slab = (color: number, h = 8) => g.fillStyle(color).fillRect(x, y + SLAB_Y + (8 - h), TILE_SIZE, h);
+    const v = variantAt(wx, wy);
+    const floorImg = (key = `floor${v}`, dx = 0): void => this.put(key, x + dx, y + SLAB_Y, -2);
+
+    if (t.type === 'wall') return this.put(`wall${v}`, x, y, -2);
+    if (t.type === 'pillar') return this.put('pillar', x, y, -2);
+    this.put(`back${v}`, x, y, -3);
+    if (t.type === 'empty' && hasTorch(wx, wy)) {
+      this.put('torch', x + 13, y + 4, -1);
+      this.drawFlame(x + 16, y + 6, wx);
+    }
 
     switch (t.type) {
-      case 'wall':
-      case 'pillar':
-        g.fillStyle(COLORS.wall).fillRect(x, y, TILE_SIZE, TILE_SIZE);
-        break;
       case 'loose': {
         // Shake sideways by a pixel while crumbling.
         const dx = t.state === 1 ? (this.sim.tick % 2 === 0 ? -1 : 1) : 0;
-        g.fillStyle(COLORS.floor).fillRect(x + dx, y + SLAB_Y, TILE_SIZE, 8);
-        g.fillStyle(0x5a4a30).fillRect(x + dx + 8, y + SLAB_Y + 3, 16, 1);
+        floorImg('loose', dx);
         break;
       }
       case 'spikes': {
-        slab(COLORS.floor);
+        floorImg();
         const h = t.state === SpikePhase.Up ? 14 : t.state === SpikePhase.Hidden ? 0 : 7;
+        g.fillStyle(0x2a2a34).fillRect(x + 2, y + SLAB_Y - 1, 28, 1);
         for (let i = 0; i < 4 && h > 0; i++) {
-          g.fillStyle(COLORS.spike).fillTriangle(x + i * 8, y + SLAB_Y, x + i * 8 + 4, y + SLAB_Y - h, x + i * 8 + 8, y + SLAB_Y);
+          const bx = x + 2 + i * 7;
+          g.fillStyle(0x7a7a8c).fillTriangle(bx, y + SLAB_Y - 1, bx + 3.5, y + SLAB_Y - 1 - h, bx + 7, y + SLAB_Y - 1);
+          g.fillStyle(0xdcdcec).fillTriangle(bx, y + SLAB_Y - 1, bx + 3.5, y + SLAB_Y - 1 - h, bx + 3.5, y + SLAB_Y - 1);
         }
         break;
       }
       case 'gate': {
-        slab(COLORS.floor);
+        floorImg();
         // Gate state is openness (0 closed .. 1 open); the portcullis lifts as it opens.
         const h = Math.round((1 - t.state) * SLAB_Y);
-        if (h > 0) g.fillStyle(COLORS.gate).fillRect(x + 12, y + SLAB_Y - h, 8, h);
+        g.fillStyle(0x23232e).fillRect(x + 8, y, 16, 3); // the housing the gate retracts into
+        if (h > 0) {
+          const top = y + SLAB_Y - h;
+          for (let i = 0; i < 4; i++) {
+            g.fillStyle(0x2a3a44).fillRect(x + 9 + i * 4, top, 2, h);
+            g.fillStyle(0x8aa8b8).fillRect(x + 9 + i * 4, top, 1, h);
+          }
+          g.fillStyle(0x3a5060).fillRect(x + 8, top, 16, 2).fillRect(x + 8, top + Math.floor(h / 2), 16, 2);
+          g.fillStyle(0xb0c8d4).fillRect(x + 8, top, 16, 1);
+        }
         break;
       }
       case 'plate':
-        slab(COLORS.floor);
-        g.fillStyle(t.state ? COLORS.plateDown : COLORS.plateUp).fillRect(x + 6, y + SLAB_Y - (t.state ? 0 : 2), 20, t.state ? 2 : 4);
+        floorImg();
+        this.put(t.state ? 'plateDown' : 'plateUp', x + 6, y + SLAB_Y - (t.state ? 2 : 4), -1);
         break;
       case 'chomper': {
-        slab(COLORS.floor);
+        floorImg();
         // 0 open, 1 closing/opening, 2 closed
         const h = t.state === 2 ? 24 : t.state === 1 ? 12 : 4;
-        g.fillStyle(COLORS.blade).fillRect(x + 4, y + SLAB_Y - h, 6, h).fillRect(x + 22, y + SLAB_Y - h, 6, h);
-        if (t.state === 2) g.fillRect(x + 4, y + SLAB_Y - 24, 24, 4);
+        for (const bx of [x + 4, x + 22]) {
+          g.fillStyle(0x6a1c1c).fillRect(bx, y + SLAB_Y - h, 6, h);
+          g.fillStyle(0xd05050).fillRect(bx, y + SLAB_Y - h, 4, h);
+          g.fillStyle(0xf09090).fillRect(bx, y + SLAB_Y - h, 1, h);
+          g.fillStyle(0xe8e8f0);
+          for (let ty = y + SLAB_Y - h + 2; ty < y + SLAB_Y - 2; ty += 4) {
+            g.fillTriangle(bx + (bx < x + 10 ? 6 : 0), ty, bx + (bx < x + 10 ? 9 : -3), ty + 2, bx + (bx < x + 10 ? 6 : 0), ty + 4);
+          }
+        }
+        if (t.state === 2) g.fillStyle(0x4a1414).fillRect(x + 4, y + SLAB_Y - 24, 24, 4).fillStyle(0xd05050).fillRect(x + 4, y + SLAB_Y - 24, 24, 2);
         break;
       }
       case 'exit':
-        slab(COLORS.floor);
-        g.fillStyle(t.state ? COLORS.exitOpen : COLORS.exitShut).fillRect(x + 6, y + 2, 20, SLAB_Y - 2);
+        floorImg();
+        this.put(t.state ? 'exitOpen' : 'exitShut', x + 3, y - 2, -1);
         break;
       case 'floor':
-        slab(COLORS.floor);
+        floorImg();
         break;
       default:
         break;
     }
+  }
+
+  /** A flickering torch flame with a faint warm glow; purely visual, so it uses the render clock. */
+  private drawFlame(x: number, y: number, seed: number): void {
+    const g = this.gfx;
+    const f = Math.sin(this.time.now / 90 + seed * 1.7) * 0.5 + Math.sin(this.time.now / 47 + seed) * 0.5;
+    for (let r = 6; r >= 1; r--) g.fillStyle(0xff9a30, 0.022).fillCircle(x, y, 4 + r * 4.2 + f * 0.8);
+    const h = 7 + f * 1.5;
+    g.fillStyle(0xe05a1c).fillTriangle(x - 3, y + 3, x + 3, y + 3, x + f, y - h);
+    g.fillStyle(0xffa83c).fillTriangle(x - 2, y + 3, x + 2, y + 3, x + f * 0.6, y - h * 0.72);
+    g.fillStyle(0xfff2a8).fillTriangle(x - 1, y + 3, x + 1, y + 3, x + f * 0.3, y - h * 0.4);
   }
 
   private drawFighter(sprite: PrinceFrame, x: number, feet: number, facing: 1 | -1, palette: Record<number, number>, extraDx = 0): void {
@@ -174,10 +238,11 @@ export class GameScene extends Phaser.Scene {
     const oy = Math.floor(player.ty / SCREEN_TILES_H) * SCREEN_TILES_H;
 
     this.gfx.clear();
+    this.poolUsed = 0;
     for (let ty = 0; ty < SCREEN_TILES_H; ty++) {
       for (let tx = 0; tx < SCREEN_TILES_W; tx++) {
         const t = grid.get(ox + tx, oy + ty);
-        if (t.type !== 'empty') this.drawTile(t, tx * TILE_SIZE, VIEW_Y + ty * TILE_SIZE);
+        this.drawTile(t, tx * TILE_SIZE, VIEW_Y + ty * TILE_SIZE, ox + tx, oy + ty);
       }
     }
 
@@ -186,16 +251,24 @@ export class GameScene extends Phaser.Scene {
       if (o.tx < ox || o.tx >= ox + SCREEN_TILES_W || o.ty < oy || o.ty >= oy + SCREEN_TILES_H) continue;
       const x = (o.tx - ox) * TILE_SIZE + 16;
       const y = VIEW_Y + (o.ty - oy) * TILE_SIZE + SLAB_Y;
-      this.gfx.fillStyle(COLORS.potion[o.kind]).fillRect(x - 3, y - 8, 6, 8).fillRect(x - 1, y - 11, 2, 3);
+      const c = COLORS.potion[o.kind];
+      this.gfx.fillStyle(0x1c1c28).fillRect(x - 4, y - 9, 8, 9).fillRect(x - 2, y - 12, 4, 4);
+      this.gfx.fillStyle(0x9ab8c8).fillRect(x - 3, y - 8, 6, 7);
+      this.gfx.fillStyle(c).fillRect(x - 3, y - 6, 6, 5);
+      this.gfx.fillStyle(0xffffff, 0.7).fillRect(x - 2, y - 7, 1, 5);
+      this.gfx.fillStyle(0x8a5a30).fillRect(x - 1, y - 13, 2, 2);
     }
 
     const mir = this.sim.mirror;
     if (mir && mir.tx >= ox && mir.tx < ox + SCREEN_TILES_W) {
-      const mx = (mir.tx - ox) * TILE_SIZE + 6;
-      const my = VIEW_Y + (mir.ty - oy) * TILE_SIZE + SLAB_Y - 28;
-      this.gfx.fillStyle(0x3a3a4a).fillRect(mx - 2, my - 2, 24, 32).fillStyle(0x9ab8d0).fillRect(mx, my, 20, 28).fillStyle(0xd8ecf8).fillRect(mx + 3, my + 3, 3, 14);
+      const mx = (mir.tx - ox) * TILE_SIZE + 3;
+      const my = VIEW_Y + (mir.ty - oy) * TILE_SIZE + SLAB_Y - 36;
+      const lit = this.sim.shadow !== undefined;
+      if (lit) this.gfx.fillStyle(0x70d8ff, 0.1).fillCircle(mx + 13, my + 18, 30).fillStyle(0x70d8ff, 0.1).fillCircle(mx + 13, my + 18, 20);
+      this.put(lit ? 'mirrorActive' : 'mirror', mx, my, -1);
     }
-
+    // Hide pooled images that this frame did not need.
+    for (let i = this.poolUsed; i < this.pool.length; i++) this.pool[i]!.setVisible(false);
     const px = player.x - ox * TILE_SIZE;
     const feet = VIEW_Y + (player.ty - oy) * TILE_SIZE + SLAB_Y;
     for (const g of this.sim.guards) {
