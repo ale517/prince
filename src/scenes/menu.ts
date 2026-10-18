@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { RENDER_SCALE } from '../config';
+import { PadEdges } from '../input';
 
 export interface MenuItem {
   label: string;
@@ -32,6 +33,16 @@ export class Menu {
     for (const code of [K.UP, K.W]) kb?.addKey(code).on('down', () => this.move(-1));
     for (const code of [K.DOWN, K.S]) kb?.addKey(code).on('down', () => this.move(1));
     for (const code of [K.ENTER, K.SPACE]) kb?.addKey(code).on('down', () => this.choose());
+
+    const pad = new PadEdges();
+    const onUpdate = (): void => {
+      const e = pad.next();
+      if (e.up) this.move(-1);
+      if (e.down) this.move(1);
+      if (e.action) this.choose();
+    };
+    scene.events.on('update', onUpdate);
+    scene.events.once('shutdown', () => scene.events.off('update', onUpdate));
   }
 
   get visible(): boolean {

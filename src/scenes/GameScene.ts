@@ -3,7 +3,7 @@ import { GUARD_PALETTE, ORIGIN_X, ORIGIN_Y, PALETTE, SCALE, SPRITE_W, buildEnvir
 import type { Img, PrinceFrame } from '../art';
 import type { Guard } from '../combat';
 import type { Tile } from '../contracts';
-import { KeyboardInput } from '../input';
+import { KeyboardInput, PadEdges } from '../input';
 import { RENDER_SCALE } from '../config';
 import { Potion, SpikePhase } from '../objects';
 import { TICK_RATE } from '../player';
@@ -63,6 +63,7 @@ export class GameScene extends Phaser.Scene {
   private lastSave?: SaveData;
   private initData: GameSceneData = {};
   private keys!: KeyboardInput;
+  private readonly padEdges = new PadEdges();
   private gfx!: Phaser.GameObjects.Graphics;
   private debug?: Phaser.GameObjects.Text;
   private acc = 0;
@@ -190,6 +191,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    if (this.padEdges.next().pause) this.togglePause();
     if (this.phase === 'playing') {
       this.keys.sample();
       // Fixed timestep: render every frame, advance the simulation at TICK_RATE.

@@ -38,6 +38,13 @@ export class UIScene extends Phaser.Scene {
     this.bound = undefined;
     this.shownPhase = '';
     this.input.keyboard?.on('keydown-M', () => audio().toggleMute());
+    const onPad = (e: GamepadEvent): void => this.say(e.type === 'gamepadconnected' ? 'Gamepad connected.' : 'Gamepad disconnected.');
+    window.addEventListener('gamepadconnected', onPad);
+    window.addEventListener('gamepaddisconnected', onPad);
+    this.events.once('shutdown', () => {
+      window.removeEventListener('gamepadconnected', onPad);
+      window.removeEventListener('gamepaddisconnected', onPad);
+    });
   }
 
   private gameScene(): GameScene {
