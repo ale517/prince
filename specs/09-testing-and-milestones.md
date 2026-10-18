@@ -22,6 +22,7 @@
 - Implements its spec's acceptance items, public API unchanged vs contract.
 - Unit tests pass, no lint/type errors, no `console.error` at runtime.
 - Docs updated if behavior deviates (spec change first).
+- Delivered as small, well-commented commits following the commit guidelines in [00-overview.md](00-overview.md).
 
 ## Performance targets
 - 60 fps on a mid laptop (integrated GPU), initial load < 5 MB, < 3 s on broadband.

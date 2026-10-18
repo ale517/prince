@@ -46,6 +46,16 @@ A browser-based, original tribute to the 1989 side-scrolling cinematic platforme
 - Agents edit only files in their ownership list (see 01). Cross-module changes require a spec update first.
 - Merge order: world -> player -> traps -> combat -> ui -> input/audio -> level.
 
+## Commit guidelines (all agents and humans)
+- Work in **small, focused commits**: one logical change each (one feature, fix or refactor). Never mix unrelated changes.
+- Commit often; each commit must build, pass lint/typecheck and keep tests green.
+- Write **clear commit messages**: a short imperative subject (<= 72 chars) prefixed with the module, e.g. `player: add ledge grab transition`. Add a body explaining *why* when it is not obvious, and reference the spec file (e.g. `Implements 05 - loose floor`).
+- Add tests in the same commit as the behavior they cover.
+- Comment code only where intent is non-obvious (formulas, frame tables, tuning constants); explain the *why*, not the *what*.
+- Commit spec changes separately from code changes, and before the code that depends on them.
+- Keep branches short-lived (`agent/<module>`); rebase on `main` before merging, then merge one branch at a time.
+- Never commit secrets, build output (`dist/`, `node_modules/`) or large unreferenced assets.
+
 ## Glossary
 - **Tile**: one grid cell, 32x32 logical px (render scale x2-3).
 - **Block**: tile type (floor, wall, empty, etc.).
