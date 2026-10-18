@@ -1,4 +1,4 @@
-import type { Facing, TileGrid, TileType } from '../contracts';
+import type { Facing, ObjectDef, ObjectType, TileGrid, TileType } from '../contracts';
 import { ArrayTileGrid } from '../world';
 
 const LEGEND: Record<string, TileType> = {
@@ -14,15 +14,31 @@ const LEGEND: Record<string, TileType> = {
   E: 'exit',
 };
 
+/** Tile characters that also spawn a behaviour object. */
+const TILE_OBJECTS: Partial<Record<TileType, ObjectType>> = {
+  loose: 'loose',
+  spikes: 'spikes',
+  gate: 'gate',
+  plate: 'plate',
+  chomper: 'chomper',
+  exit: 'exit',
+};
+
 export interface ParsedLevel {
   grid: TileGrid;
   start: { tx: number; ty: number; facing: Facing };
+  objects: ObjectDef[];
 }
 
-/** Parses an ASCII map; '@' marks the start position and is treated as floor. */
-export function parseAscii(rows: readonly string[]): ParsedLevel {
+/**
+ * Parses an ASCII map; '@' marks the start position and is treated as floor.
+ * `extra` adds free-standing objects (potions, checkpoints) and can override the
+ * auto-generated object of a tile (same type and position) to set ids and props.
+ */
+export function parseAscii(rows: readonly string[], extra: readonly ObjectDef[] = []): ParsedLevel {
   const width = rows[0]?.length ?? 0;
   const grid = new ArrayTileGrid(width, rows.length);
+  const objects: ObjectDef[] = [];
   let start: ParsedLevel['start'] | undefined;
   rows.forEach((row, y) => {
     if (row.length !== width) throw new Error(`row ${y} has width ${row.length}, expected ${width}`);
@@ -35,10 +51,23 @@ export function parseAscii(rows: readonly string[]): ParsedLevel {
       const type = LEGEND[ch];
       if (!type) throw new Error(`unknown tile '${ch}' at (${x},${y})`);
       grid.set(x, y, { type, state: 0 });
+      const objType = TILE_OBJECTS[type];
+      if (objType) objects.push({ id: `${objType}@${x},${y}`, type: objType, tx: x, ty: y });
     });
   });
   if (!start) throw new Error("level has no start marker '@'");
-  return { grid, start };
+
+  for (const def of extra) {
+    const i = objects.findIndex((o) => o.type === def.type && o.tx === def.tx && o.ty === def.ty);
+    if (i >= 0) objects[i] = def;
+    else objects.push(def);
+  }
+  const ids = new Set<string>();
+  for (const o of objects) {
+    if (ids.has(o.id)) throw new Error(`duplicate object id '${o.id}'`);
+    ids.add(o.id);
+  }
+  return { grid, start, objects };
 }
 
 /** Movement test arena: a 2-tile gap, a climbable ledge and a drop to the lower screen. */
