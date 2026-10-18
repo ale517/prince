@@ -4,7 +4,7 @@ import type { PrinceFrame } from '../art';
 import type { Guard } from '../combat';
 import type { Tile } from '../contracts';
 import { KeyboardInput } from '../input';
-import { DUEL_LEVEL, HAZARD_LEVEL, HAZARD_OBJECTS, TEST_LEVEL, duelGuards, parseAscii } from '../level';
+import { DUEL_LEVEL, HAZARD_LEVEL, HAZARD_OBJECTS, MIRROR, MIRROR_LEVEL, TEST_LEVEL, duelGuards, parseAscii } from '../level';
 import { RENDER_SCALE } from '../config';
 import { Potion, SpikePhase } from '../objects';
 import { TICK_RATE } from '../player';
@@ -38,10 +38,19 @@ function guardSprite(g: Guard): { state: PlayerState; dx: number } {
   return { state: g.state === 'idle' ? 'idle' : 'ready', dx: 0 };
 }
 
+/** The reflection is drawn as a dark, cold silhouette of the prince's own palette. */
+const SHADOW_PALETTE: Record<number, number> = Object.fromEntries(
+  Object.entries(PALETTE).map(([k, c]) => {
+    const l = (((c >> 16) & 255) * 0.3 + ((c >> 8) & 255) * 0.59 + (c & 255) * 0.11) / 255;
+    return [Number(k), (Math.round(20 + l * 40) << 16) | (Math.round(20 + l * 45) << 8) | Math.round(50 + l * 80)];
+  }),
+);
+
 function startLevel(): Simulation {
-  // ?level=move loads the plain movement arena, ?level=duel[&skill=1..5] a sword fight; hazards are the default.
+  // ?level=move loads the plain movement arena, ?level=duel[&skill=1..5] a sword fight, ?level=mirror the shadow; hazards are the default.
   const q = new URLSearchParams(window.location.search);
   const level = q.get('level');
+  if (level === 'mirror') return new Simulation(parseAscii(MIRROR_LEVEL, [], { hasSword: true, mirror: MIRROR }));
   if (level === 'duel') {
     const skill = Math.min(5, Math.max(1, Number(q.get('skill')) || 1)) as 1 | 2 | 3 | 4 | 5;
     return new Simulation(parseAscii(DUEL_LEVEL, [], { hasSword: true, guards: duelGuards(skill) }), Number(q.get('seed')) || 1);
@@ -180,12 +189,24 @@ export class GameScene extends Phaser.Scene {
       this.gfx.fillStyle(COLORS.potion[o.kind]).fillRect(x - 3, y - 8, 6, 8).fillRect(x - 1, y - 11, 2, 3);
     }
 
+    const mir = this.sim.mirror;
+    if (mir && mir.tx >= ox && mir.tx < ox + SCREEN_TILES_W) {
+      const mx = (mir.tx - ox) * TILE_SIZE + 6;
+      const my = VIEW_Y + (mir.ty - oy) * TILE_SIZE + SLAB_Y - 28;
+      this.gfx.fillStyle(0x3a3a4a).fillRect(mx - 2, my - 2, 24, 32).fillStyle(0x9ab8d0).fillRect(mx, my, 20, 28).fillStyle(0xd8ecf8).fillRect(mx + 3, my + 3, 3, 14);
+    }
+
     const px = player.x - ox * TILE_SIZE;
     const feet = VIEW_Y + (player.ty - oy) * TILE_SIZE + SLAB_Y;
     for (const g of this.sim.guards) {
       if (g.tx < ox || g.tx >= ox + SCREEN_TILES_W || g.ty < oy || g.ty >= oy + SCREEN_TILES_H) continue;
       const gs = guardSprite(g);
       this.drawFighter(princeFrame(gs.state, g.frame, 4, 0, 'guard'), g.x - ox * TILE_SIZE, VIEW_Y + (g.ty - oy) * TILE_SIZE + SLAB_Y, g.facing, GUARD_PALETTE, gs.dx);
+    }
+    const sh = this.sim.shadow;
+    if (sh && sh.tx >= ox && sh.tx < ox + SCREEN_TILES_W) {
+      const ss = princeFrame(sh.state, sh.frame, sh.landDuration, sh.fallPhase);
+      this.drawFighter(ss, sh.x - ox * TILE_SIZE, VIEW_Y + (sh.ty - oy) * TILE_SIZE + SLAB_Y, sh.facing, SHADOW_PALETTE);
     }
     const sprite = princeFrame(player.state, player.frame, player.landDuration, player.fallPhase);
     this.drawFighter(sprite, px, feet + 0, player.facing, PALETTE);
