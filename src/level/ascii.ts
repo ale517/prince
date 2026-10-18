@@ -1,4 +1,4 @@
-import type { Facing, ObjectDef, ObjectType, TileGrid, TileType } from '../contracts';
+import type { Facing, GuardDef, ObjectDef, ObjectType, TileGrid, TileType } from '../contracts';
 import { ArrayTileGrid } from '../world';
 
 const LEGEND: Record<string, TileType> = {
@@ -28,6 +28,14 @@ export interface ParsedLevel {
   grid: TileGrid;
   start: { tx: number; ty: number; facing: Facing };
   objects: ObjectDef[];
+  guards: GuardDef[];
+  /** The prince begins with a sword (the prototype finds it at the start). */
+  hasSword: boolean;
+}
+
+export interface LevelExtras {
+  guards?: readonly GuardDef[];
+  hasSword?: boolean;
 }
 
 /**
@@ -35,7 +43,7 @@ export interface ParsedLevel {
  * `extra` adds free-standing objects (potions, checkpoints) and can override the
  * auto-generated object of a tile (same type and position) to set ids and props.
  */
-export function parseAscii(rows: readonly string[], extra: readonly ObjectDef[] = []): ParsedLevel {
+export function parseAscii(rows: readonly string[], extra: readonly ObjectDef[] = [], more: LevelExtras = {}): ParsedLevel {
   const width = rows[0]?.length ?? 0;
   const grid = new ArrayTileGrid(width, rows.length);
   const objects: ObjectDef[] = [];
@@ -67,7 +75,7 @@ export function parseAscii(rows: readonly string[], extra: readonly ObjectDef[] 
     if (ids.has(o.id)) throw new Error(`duplicate object id '${o.id}'`);
     ids.add(o.id);
   }
-  return { grid, start, objects };
+  return { grid, start, objects, guards: [...(more.guards ?? [])], hasSword: more.hasSword ?? false };
 }
 
 /** Movement test arena: a 2-tile gap, a climbable ledge and a drop to the lower screen. */

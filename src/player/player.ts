@@ -1,5 +1,6 @@
 import { EMPTY_INPUT } from '../contracts';
-import type { Body, DamageEvent, Entity, EventBus, Facing, InputState, WorldQuery } from '../contracts';
+import type { Body, Combatant, DamageEvent, EventBus, Facing, FightAction, InputState, WorldQuery } from '../contracts';
+import * as F from '../combat/constants';
 import { TILE_SIZE, fallDamage } from '../world';
 import * as C from './constants';
 
@@ -18,11 +19,30 @@ export type PlayerState =
   | 'fall'
   | 'land'
   | 'crouch'
+  | 'drawSword'
+  | 'sheathe'
+  | 'ready'
+  | 'advance'
+  | 'retreat'
+  | 'strike'
+  | 'parry'
+  | 'hurt'
   | 'dead';
 
 const GROUNDED: ReadonlySet<PlayerState> = new Set([
   'idle', 'startRun', 'run', 'stopRun', 'turn', 'step', 'land', 'crouch',
+  'drawSword', 'sheathe', 'ready', 'advance', 'retreat', 'strike', 'parry', 'hurt',
 ]);
+
+const FIGHT_ACTION: Partial<Record<PlayerState, FightAction>> = {
+  ready: 'ready',
+  drawSword: 'ready',
+  advance: 'advance',
+  retreat: 'retreat',
+  strike: 'strike',
+  parry: 'parry',
+  hurt: 'hurt',
+};
 
 export interface PlayerStart {
   tx: number;
@@ -30,8 +50,9 @@ export interface PlayerStart {
   facing: Facing;
 }
 
-export class Player implements Entity, Body {
+export class Player implements Combatant, Body {
   readonly id = 'player';
+  readonly team = 'player';
   /** Horizontal position in px (centre of the character). */
   x: number;
   ty: number;
@@ -48,6 +69,8 @@ export class Player implements Entity, Body {
   private fallTick = 0;
   private landTicks = C.LAND_TICKS;
   private hangTarget: { tx: number; ty: number } | null = null;
+  private hurtTicks = F.HURT_TICKS;
+  strikeConnected = false;
 
   constructor(
     private readonly world: WorldQuery,
@@ -70,6 +93,24 @@ export class Player implements Entity, Body {
 
   get crouching(): boolean {
     return this.state === 'crouch';
+  }
+
+  get fightAction(): FightAction {
+    return FIGHT_ACTION[this.state] ?? 'none';
+  }
+
+  get fightFrame(): number {
+    return this.frame;
+  }
+
+  pushBack(px: number): void {
+    if (this.grounded) this.moveX(px);
+  }
+
+  stagger(ticks: number): void {
+    if (this.state === 'dead' || !this.grounded) return;
+    this.hurtTicks = ticks;
+    this.setState('hurt');
   }
 
   /** Length of the current landing recovery, for the landing animation. */
@@ -122,6 +163,7 @@ export class Player implements Entity, Body {
   private setState(s: PlayerState): void {
     this.state = s;
     this.frame = 0;
+    this.strikeConnected = false;
   }
 
   /** Moves 1px at a time so walls stop the player exactly at the tile edge. */
@@ -141,6 +183,7 @@ export class Player implements Entity, Body {
     const dir = this.dirInput();
     switch (s) {
       case 'idle': {
+        if (i.action && this.hasSword) return this.setState('drawSword');
         if (i.down) return this.setState('crouch');
         if (i.up) {
           if (dir) {
@@ -216,6 +259,38 @@ export class Player implements Entity, Body {
         if (!i.down) this.setState('idle');
         return;
       case 'dead':
+        return;
+      case 'drawSword':
+        if (this.frame + 1 >= F.DRAW_TICKS) this.setState('ready');
+        return;
+      case 'sheathe':
+        if (this.frame + 1 >= F.SHEATHE_TICKS) this.setState('idle');
+        return;
+      case 'ready': {
+        if (i.down) return this.setState('sheathe');
+        if (i.action) return this.setState('strike');
+        if (i.up) return this.setState('parry');
+        if (dir === this.facing) return this.setState('advance');
+        if (dir) return this.setState('retreat');
+        return;
+      }
+      case 'advance':
+      case 'retreat': {
+        // Same rule as careful steps: shuffling never leaves the floor.
+        const way = s === 'advance' ? this.facing : (-this.facing as Facing);
+        const nextTile = Math.floor((this.x + F.SHUFFLE_PX * way) / TILE_SIZE);
+        if (this.world.groundAt(nextTile, this.ty)) this.moveX(F.SHUFFLE_PX * way);
+        if (this.frame + 1 >= F.SHUFFLE_TICKS) this.setState('ready');
+        return;
+      }
+      case 'strike':
+        if (this.frame + 1 >= F.STRIKE_TICKS) this.setState('ready');
+        return;
+      case 'parry':
+        if (this.frame + 1 >= F.PARRY_TICKS) this.setState('ready');
+        return;
+      case 'hurt':
+        if (this.frame + 1 >= this.hurtTicks) this.setState('ready');
         return;
     }
   }
